@@ -34,3 +34,6 @@ out/
 build/
 target/
 bin/
+
+# IDE / Tools
+.atl/
