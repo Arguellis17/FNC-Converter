@@ -14,17 +14,33 @@ public class TransformationStep {
     private final Grammar grammarAfter;
     private final List<String> productionsRemoved;
     private final List<String> productionsAdded;
+    /**
+     * Líneas de detalle elemento por elemento (ej: "Se elimina la
+     * variable inútil: F", "Eliminando vacío: B -> ε"). Si el paso no
+     * encontró nada que transformar, contiene el aviso correspondiente.
+     */
+    private final List<String> details;
 
     public TransformationStep(String stepName, String description,
                               Grammar grammarBefore, Grammar grammarAfter,
                               List<String> productionsRemoved,
                               List<String> productionsAdded) {
+        this(stepName, description, grammarBefore, grammarAfter,
+                productionsRemoved, productionsAdded, List.of());
+    }
+
+    public TransformationStep(String stepName, String description,
+                              Grammar grammarBefore, Grammar grammarAfter,
+                              List<String> productionsRemoved,
+                              List<String> productionsAdded,
+                              List<String> details) {
         this.stepName = stepName;
         this.description = description;
         this.grammarBefore = grammarBefore;
         this.grammarAfter = grammarAfter;
         this.productionsRemoved = productionsRemoved;
         this.productionsAdded = productionsAdded;
+        this.details = details == null ? List.of() : List.copyOf(details);
     }
 
     // Getters
@@ -50,6 +66,17 @@ public class TransformationStep {
 
     public List<String> getProductionsAdded() {
         return productionsAdded;
+    }
+
+    public List<String> getDetails() {
+        return details;
+    }
+
+    /**
+     * Indica si el paso realmente transformó algo.
+     */
+    public boolean hasChanges() {
+        return !productionsRemoved.isEmpty() || !productionsAdded.isEmpty();
     }
 
     /**

@@ -57,15 +57,28 @@ public class ChomskyNormalFormConverter {
         // Step 3: Validate CNF
         validateCNF(transformedGrammar);
 
+        List<String> details = new ArrayList<>();
+        String description;
+        if (productionsRemoved.isEmpty() && productionsAdded.isEmpty()) {
+            description = "La gramática ya está en Forma Normal de Chomsky "
+                    + "(solo A -> BC o A -> a). No se modifica nada.";
+            details.add("Sin cambios: todas las producciones ya cumplen FNC.");
+        } else {
+            description = "Se sustituyeron los terminales en producciones largas por nuevas "
+                    + "variables y se redujeron todas las producciones a la forma binaria "
+                    + "requerida por la FNC: A -> BC o A -> a.";
+            details.add("Producciones transformadas: " + productionsRemoved.size()
+                    + ". Nuevas variables auxiliares creadas en las agregadas.");
+        }
+
         return new TransformationStep(
             "Conversión a Forma Normal de Chomsky",
-            "Se sustituyeron los terminales en producciones largas por nuevas variables " +
-            "y se redujeron todas las producciones a la forma binaria requerida por la FNC: " +
-            "A → BC o A → a.",
+            description,
             originalGrammar,
             transformedGrammar,
             productionsRemoved,
-            productionsAdded
+            productionsAdded,
+            details
         );
     }
 

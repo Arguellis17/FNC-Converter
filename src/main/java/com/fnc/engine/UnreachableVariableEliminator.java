@@ -52,14 +52,31 @@ public class UnreachableVariableEliminator {
         // Step 2: Create grammar without unreachable variables
         transformedGrammar = createGrammarWithoutUnreachable(grammar);
 
+        List<String> details = new ArrayList<>();
+        String description;
+        Set<String> unreachable = new LinkedHashSet<>(grammar.getVariables());
+        unreachable.removeAll(reachableVariables);
+        if (unreachable.isEmpty()) {
+            description = "No se identificaron variables inalcanzables. "
+                    + "La gramática no se modifica y se pasa al siguiente paso.";
+            details.add("Sin variables inalcanzables: todas se alcanzan desde "
+                    + grammar.getStartSymbol() + ".");
+        } else {
+            description = "Variables inalcanzables identificadas: " + String.join(", ", unreachable)
+                    + ". Se eliminan la variable y sus producciones.";
+            for (String u : unreachable) {
+                details.add("Se elimina la variable inalcanzable: " + u);
+            }
+        }
+
         return new TransformationStep(
             "Eliminación de variables inalcanzables",
-            "Se identificaron las variables alcanzables desde el símbolo inicial " +
-            "y se eliminaron las variables y producciones que no son accesibles.",
+            description,
             originalGrammar,
             transformedGrammar,
             productionsRemoved,
-            productionsAdded
+            productionsAdded,
+            details
         );
     }
 

@@ -1,6 +1,7 @@
 package com.fnc.ui;
 
 import com.fnc.model.Grammar;
+import com.fnc.model.GrammarFormatter;
 import com.fnc.model.TransformationStep;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -98,25 +99,33 @@ public class TransformationPanel extends SplitPane {
         }
         TransformationStep step = steps.get(index);
         StringBuilder sb = new StringBuilder();
-        sb.append("=== ").append(step.getStepName()).append(" ===\n\n");
-        sb.append(step.getDescription()).append("\n\n");
+        sb.append(index + 1).append(") ").append(step.getStepName()).append("\n");
+        sb.append(step.getDescription()).append("\n");
 
-        sb.append("--- Gramática antes ---\n");
-        sb.append(formatGrammar(step.getGrammarBefore())).append("\n\n");
-
-        if (!step.getProductionsRemoved().isEmpty()) {
-            sb.append("Producciones eliminadas:\n");
-            step.getProductionsRemoved().forEach(p -> sb.append("  - ").append(p).append("\n"));
+        if (!step.getDetails().isEmpty()) {
             sb.append("\n");
+            for (String detail : step.getDetails()) {
+                sb.append("  • ").append(detail).append("\n");
+            }
         }
+
+        sb.append("\n--- Sigma antes ---\n");
+        if (step.hasChanges()) {
+            sb.append(GrammarFormatter.formatWithStruck(
+                    step.getGrammarBefore(),
+                    new java.util.HashSet<>(step.getProductionsRemoved())));
+        } else {
+            sb.append(GrammarFormatter.formatFull(step.getGrammarBefore()));
+        }
+
         if (!step.getProductionsAdded().isEmpty()) {
-            sb.append("Producciones agregadas:\n");
+            sb.append("\n\nProducciones agregadas:\n");
             step.getProductionsAdded().forEach(p -> sb.append("  + ").append(p).append("\n"));
-            sb.append("\n");
+            sb.setLength(sb.length() - 1);
         }
 
-        sb.append("--- Gramática después ---\n");
-        sb.append(formatGrammar(step.getGrammarAfter()));
+        sb.append("\n\n--- Sigma después ---\n");
+        sb.append(GrammarFormatter.formatFull(step.getGrammarAfter()));
 
         txtDetail.setText(sb.toString());
         txtDetail.setScrollTop(0);
@@ -126,6 +135,6 @@ public class TransformationPanel extends SplitPane {
         if (grammar == null) {
             return "(sin gramática)";
         }
-        return grammar.toString();
+        return GrammarFormatter.formatFull(grammar);
     }
 }

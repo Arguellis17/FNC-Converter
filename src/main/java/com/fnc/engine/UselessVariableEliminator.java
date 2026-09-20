@@ -52,15 +52,30 @@ public class UselessVariableEliminator {
         // Step 2: Create grammar without non-generating variables
         transformedGrammar = createGrammarWithoutNonGenerating(grammar);
 
+        List<String> details = new ArrayList<>();
+        String description;
+        Set<String> useless = new LinkedHashSet<>(grammar.getVariables());
+        useless.removeAll(generatingVariables);
+        if (useless.isEmpty()) {
+            description = "No se identificaron variables inútiles. "
+                    + "La gramática no se modifica y se pasa al siguiente paso.";
+            details.add("Sin variables inútiles: todas generan cadenas terminales.");
+        } else {
+            description = "Variables inútiles identificadas: " + String.join(", ", useless)
+                    + ". Se eliminan la variable y sus producciones.";
+            for (String u : useless) {
+                details.add("Se elimina la variable inútil: " + u);
+            }
+        }
+
         return new TransformationStep(
-            "Eliminación de variables inútiles (no generadoras)",
-            "Se identificaron las variables que pueden generar cadenas terminales " +
-            "y se eliminaron las variables y producciones que no contribuyen a generar " +
-            "palabras del lenguaje.",
+            "Eliminación de variables inútiles",
+            description,
             originalGrammar,
             transformedGrammar,
             productionsRemoved,
-            productionsAdded
+            productionsAdded,
+            details
         );
     }
 

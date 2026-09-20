@@ -27,8 +27,8 @@ import java.util.function.Function;
 /**
  * Ventana principal del aplicativo (menú + paneles).
  * Ofrece modo paso a paso (una etapa a la vez) y modo automático
- * (proceso completo), según el menú sugerido del microproyecto:
- * nulas -> unitarias -> inútiles -> inalcanzables -> FNC.
+ * (proceso completo), en el orden del microproyecto:
+ * inútiles -> inalcanzables -> unitarias -> nulas -> FNC.
  */
 public class MainFrame extends BorderPane {
 
@@ -94,28 +94,28 @@ public class MainFrame extends BorderPane {
         btnFull.getStyleClass().add("primary-button");
         btnFull.setOnAction(e -> runFullProcess());
 
-        Button btnNull = new Button("1. Nulas");
-        btnNull.setOnAction(e -> runSingleStep("nulas",
-                g -> new NullProductionEliminator().eliminate(g)));
-
-        Button btnUnit = new Button("2. Unitarias");
-        btnUnit.setOnAction(e -> runSingleStep("unitarias",
-                g -> new UnitProductionEliminator().eliminate(g)));
-
-        Button btnUseless = new Button("3. Inútiles");
+        Button btnUseless = new Button("1. Inútiles");
         btnUseless.setOnAction(e -> runSingleStep("inútiles",
                 g -> new UselessVariableEliminator().eliminate(g)));
 
-        Button btnUnreachable = new Button("4. Inalcanzables");
+        Button btnUnreachable = new Button("2. Inalcanzables");
         btnUnreachable.setOnAction(e -> runSingleStep("inalcanzables",
                 g -> new UnreachableVariableEliminator().eliminate(g)));
+
+        Button btnUnit = new Button("3. Unitarias");
+        btnUnit.setOnAction(e -> runSingleStep("unitarias",
+                g -> new UnitProductionEliminator().eliminate(g)));
+
+        Button btnNull = new Button("4. Nulas");
+        btnNull.setOnAction(e -> runSingleStep("nulas",
+                g -> new NullProductionEliminator().eliminate(g)));
 
         Button btnCnf = new Button("5. FNC");
         btnCnf.setOnAction(e -> runSingleStep("FNC",
                 g -> new ChomskyNormalFormConverter().convert(g)));
 
         return new ToolBar(btnFull, new Separator(),
-                btnNull, btnUnit, btnUseless, btnUnreachable, btnCnf);
+                btnUseless, btnUnreachable, btnUnit, btnNull, btnCnf);
     }
 
     /** Ejecuta las 5 etapas en orden sobre la gramática del formulario. */
@@ -142,10 +142,10 @@ public class MainFrame extends BorderPane {
         List<TransformationStep> steps = new ArrayList<>();
         Grammar current = grammar;
         List<Function<Grammar, TransformationStep>> stages = List.of(
-                g -> new NullProductionEliminator().eliminate(g),
-                g -> new UnitProductionEliminator().eliminate(g),
                 g -> new UselessVariableEliminator().eliminate(g),
                 g -> new UnreachableVariableEliminator().eliminate(g),
+                g -> new UnitProductionEliminator().eliminate(g),
+                g -> new NullProductionEliminator().eliminate(g),
                 g -> new ChomskyNormalFormConverter().convert(g));
 
         for (Function<Grammar, TransformationStep> stage : stages) {
