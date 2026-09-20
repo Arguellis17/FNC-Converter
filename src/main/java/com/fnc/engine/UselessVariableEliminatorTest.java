@@ -25,6 +25,7 @@ public class UselessVariableEliminatorTest {
         testChainOfNonGenerating();
         testNoNonGenerating();
         testMixedProductions();
+        testEpsilonPreserved();
 
         System.out.println("\n=== Results ===");
         System.out.println("Passed: " + passed);
@@ -200,6 +201,41 @@ public class UselessVariableEliminatorTest {
         check("S → A preserved", hasSA);
         check("A → a preserved", hasAa);
         check("S → B removed", !hasSB);
+    }
+
+    /**
+     * Test: el ε de una variable generadora NO se elimina aquí.
+     * Solo lo elimina el paso de producciones nulas.
+     * Ej: E -> B | D | ε | 1  =>  el ε sobrevive, F (sin producciones) sale.
+     */
+    static void testEpsilonPreserved() {
+        System.out.println("\nTest 6: Epsilon preserved for generating variables");
+
+        Grammar g = new Grammar(
+            Set.of("S", "E", "F"),
+            Set.of("a"),
+            List.of(
+                new Production("S", List.of("E")),
+                new Production("E", List.of("a")),
+                new Production("E", List.of())  // E -> ε
+                // F sin producciones -> inútil
+            ),
+            "S"
+        );
+
+        UselessVariableEliminator eliminator = new UselessVariableEliminator();
+        TransformationStep step = eliminator.eliminate(g);
+
+        Grammar result = step.getGrammarAfter();
+
+        boolean hasEpsilon = result.getProductions().stream()
+            .anyMatch(p -> p.getLeftSide().equals("E") && p.getRightSide().isEmpty());
+        boolean epsilonRemoved = eliminator.getProductionsRemoved().stream()
+            .anyMatch(s -> s.equals("E -> ε"));
+
+        check("E sigue siendo generadora", eliminator.getGeneratingVariables().contains("E"));
+        check("E -> ε se conserva", hasEpsilon);
+        check("E -> ε no aparece como eliminada", !epsilonRemoved);
     }
 
     static void check(String name, boolean condition) {

@@ -155,11 +155,10 @@ public class UselessVariableEliminator {
                 continue;
             }
 
-            // Skip ε-productions
-            if (p.getRightSide().isEmpty()) {
-                productionsRemoved.add(p.toString());
-                continue;
-            }
+            // NOTA: las producciones ε (vacío) NO se tocan aquí aunque su
+            // variable sea generadora: solo las elimina el paso de
+            // producciones nulas. Solo sale el ε de una variable que de por
+            // sí es inútil (caso anterior).
 
             // Check if all symbols on right side are valid
             // (terminal or generating variable)
