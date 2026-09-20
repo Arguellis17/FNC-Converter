@@ -1,0 +1,43 @@
+/* Estilos del aplicativo FNC Converter */
+
+.root {
+    -fx-font-family: "Segoe UI", "Helvetica", "Arial", sans-serif;
+    -fx-font-size: 13px;
+}
+
+.panel-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.mono {
+    -fx-font-family: "Consolas", "Menlo", "monospace";
+    -fx-font-size: 12.5px;
+}
+
+.primary-button {
+    -fx-font-weight: bold;
+}
+
+.validation-ok {
+    -fx-control-inner-background: #e8f5e9;
+}
+
+.validation-error {
+    -fx-control-inner-background: #fdecea;
+}
+
+.status-bar {
+    -fx-text-fill: #444444;
+    -fx-font-style: italic;
+}
+
+.status-ok {
+    -fx-text-fill: #1b7f2b;
+    -fx-font-weight: bold;
+}
+
+.status-error {
+    -fx-text-fill: #b3261e;
+    -fx-font-weight: bold;
+}

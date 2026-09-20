@@ -48,14 +48,37 @@ public class UnitProductionEliminator {
         // Step 2: Create grammar without unit productions
         transformedGrammar = createGrammarWithoutUnitProductions(grammar, unitPairs);
 
+        List<String> details = new ArrayList<>();
+        String description;
+        if (productionsRemoved.isEmpty()) {
+            description = "No se identificaron producciones unitarias. "
+                    + "La gramática no se modifica y se pasa al siguiente paso.";
+            details.add("Sin producciones de la forma A -> B.");
+        } else {
+            description = "Se eliminan las producciones unitarias: en cada variable "
+                    + "se reemplaza la unitaria por las producciones del símbolo destino.";
+            for (String removed : productionsRemoved) {
+                details.add("Se elimina la unitaria: " + removed);
+            }
+            List<String> pairs = new ArrayList<>();
+            for (Map.Entry<String, Set<String>> entry : unitPairs.entrySet()) {
+                for (String b : entry.getValue()) {
+                    pairs.add(entry.getKey() + " -> " + b);
+                }
+            }
+            if (!pairs.isEmpty()) {
+                details.add("Pares unitarios: " + String.join(", ", pairs) + ".");
+            }
+        }
+
         return new TransformationStep(
             "Eliminación de producciones unitarias",
-            "Se identificaron los pares unitarios y se agregaron las producciones " +
-            "no unitarias correspondientes, eliminando todas las producciones de la forma A → B.",
+            description,
             originalGrammar,
             transformedGrammar,
             productionsRemoved,
-            productionsAdded
+            productionsAdded,
+            details
         );
     }
 

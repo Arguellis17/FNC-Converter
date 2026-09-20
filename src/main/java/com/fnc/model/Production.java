@@ -59,7 +59,7 @@ public class Production {
 
     @Override
     public String toString() {
-        String right = rightSide.isEmpty() ? "ε" : String.join(" | ", rightSide);
+        String right = rightSide.isEmpty() ? "ε" : String.join(" ", rightSide);
         return leftSide + " -> " + right;
     }
 }

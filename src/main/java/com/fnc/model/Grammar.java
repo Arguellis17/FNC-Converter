@@ -91,6 +91,42 @@ public class Grammar {
     }
 
     /**
+     * Registra automáticamente los símbolos usados en producciones pero no
+     * declarados en V ni T, para no bloquear el proceso con un error:
+     * mayúscula inicial -> variable, otro caso -> terminal.
+     * Así, una variable usada pero sin producciones propias (ej: F en A -> F1)
+     * entra al proceso y la elimina el paso de variables inútiles.
+     * @return mapa símbolo -> "variable"|"terminal" en orden de aparición.
+     */
+    public Map<String, String> autoDeclareMissingSymbols() {
+        Map<String, String> added = new LinkedHashMap<>();
+        for (Production p : productions) {
+            declareIfMissing(p.getLeftSide(), added);
+            for (String s : p.getRightSide()) {
+                if (s.equals("ε")) {
+                    continue;
+                }
+                declareIfMissing(s, added);
+            }
+        }
+        return added;
+    }
+
+    private void declareIfMissing(String symbol, Map<String, String> added) {
+        if (symbol == null || symbol.isEmpty()
+                || variables.contains(symbol) || terminals.contains(symbol)) {
+            return;
+        }
+        if (Character.isUpperCase(symbol.charAt(0))) {
+            variables.add(symbol);
+            added.put(symbol, "variable");
+        } else {
+            terminals.add(symbol);
+            added.put(symbol, "terminal");
+        }
+    }
+
+    /**
      * Create a deep copy of this grammar.
      */
     public Grammar copy() {
@@ -103,7 +139,8 @@ public class Grammar {
     }
 
     /**
-     * Format grammar as a readable string.
+     * Format grammar as a readable string, grouping alternatives
+     * by variable (ej: S -> A B | B).
      */
     @Override
     public String toString() {
@@ -113,8 +150,8 @@ public class Grammar {
         sb.append("T = {").append(String.join(", ", terminals)).append("}\n");
         sb.append("S = ").append(startSymbol).append("\n\n");
         sb.append("P = {\n");
-        for (Production p : productions) {
-            sb.append("  ").append(p).append("\n");
+        for (String line : GrammarFormatter.formatProductionLines(this)) {
+            sb.append("  ").append(line).append("\n");
         }
         sb.append("}");
         return sb.toString();

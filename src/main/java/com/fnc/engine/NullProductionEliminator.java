@@ -51,14 +51,29 @@ public class NullProductionEliminator {
         // Step 2: Create new grammar without null productions
         transformedGrammar = createGrammarWithoutNullProductions(grammar);
 
+        List<String> details = new ArrayList<>();
+        String description;
+        if (nullableVariables.isEmpty()) {
+            description = "No se identificaron producciones nulas. "
+                    + "La gramática no se modifica y se pasa al siguiente paso.";
+            details.add("Sin variables anulables: ninguna deriva ε.");
+        } else {
+            description = "Variables anulables identificadas: "
+                    + String.join(", ", nullableVariables)
+                    + ". Se generan las producciones equivalentes y se eliminan los vacíos.";
+            for (String removed : productionsRemoved) {
+                details.add("Eliminando vacío: " + removed);
+            }
+        }
+
         return new TransformationStep(
             "Eliminación de producciones nulas",
-            "Se identificaron las variables anulables y se generaron " +
-            "las producciones equivalentes eliminando las producciones nulas.",
+            description,
             originalGrammar,
             transformedGrammar,
             productionsRemoved,
-            productionsAdded
+            productionsAdded,
+            details
         );
     }
 
