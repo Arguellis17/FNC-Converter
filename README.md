@@ -74,6 +74,9 @@ con `Main class: com.fnc.Main` (ver `.idea/runConfigurations/`).
 
 - Cada caracter es un símbolo: los espacios y comas son opcionales.
 - Variables y terminales: Ej: `S, A, B` o `SAB`.
+- Los símbolos usados pero no declarados no bloquean: se asumen
+  automáticamente (mayúscula → variable, otro → terminal) y el proceso
+  los clasifica (ej: una variable sin producciones sale en inútiles).
 - Producciones: una por línea, con `->` o `→` y alternativas con `|`. Ej:
 
 ```text

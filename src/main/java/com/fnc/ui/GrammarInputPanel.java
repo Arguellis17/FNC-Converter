@@ -36,6 +36,9 @@ public class GrammarInputPanel extends VBox {
     /** Callback que se ejecuta cuando la gramática fue validada con éxito. */
     private Runnable onValidGrammar;
 
+    /** Símbolos auto-detectados del último parseo (símbolo -> variable|terminal). */
+    private java.util.Map<String, String> lastAutoDeclared = new java.util.LinkedHashMap<>();
+
     public GrammarInputPanel() {
         super(8);
         setPadding(new Insets(10));
@@ -101,7 +104,10 @@ public class GrammarInputPanel extends VBox {
             com.fnc.engine.GrammarValidator validator =
                     new com.fnc.engine.GrammarValidator();
             boolean valid = validator.validate(grammar);
-            showValidationResult(valid, validator.getErrors(), validator.getWarnings());
+            List<String> notices = new ArrayList<>(validator.getWarnings());
+            lastAutoDeclared.forEach((sym, kind) -> notices.add(
+                    "Info: símbolo '" + sym + "' no declarado: se asumió como " + kind + "."));
+            showValidationResult(valid, validator.getErrors(), notices);
             if (valid && onValidGrammar != null) {
                 onValidGrammar.run();
             }
@@ -114,8 +120,12 @@ public class GrammarInputPanel extends VBox {
 
     public void showValidationResult(boolean valid, List<String> errors, List<String> warnings) {
         StringBuilder sb = new StringBuilder();
-        if (valid && warnings.isEmpty()) {
+        if (valid) {
             sb.append("Gramática válida. Lista para convertir.");
+            if (!warnings.isEmpty()) {
+                sb.append("\n");
+            }
+            warnings.forEach(warn -> sb.append(warn).append("\n"));
         } else {
             errors.forEach(err -> sb.append(err).append("\n"));
             warnings.forEach(warn -> sb.append(warn).append("\n"));
@@ -144,7 +154,11 @@ public class GrammarInputPanel extends VBox {
             throw new IllegalArgumentException("Debe ingresar al menos una producción.");
         }
 
-        return new Grammar(variables, terminals, productions, start);
+        Grammar grammar = new Grammar(variables, terminals, productions, start);
+        // No bloquear por símbolos no declarados: se asumen (mayúscula -> variable)
+        // y el proceso los clasifica (ej: F sin producciones sale en inútiles).
+        lastAutoDeclared = grammar.autoDeclareMissingSymbols();
+        return grammar;
     }
 
     /**
