@@ -103,7 +103,8 @@ public class Grammar {
     }
 
     /**
-     * Format grammar as a readable string.
+     * Format grammar as a readable string, grouping alternatives
+     * by variable (ej: S -> A B | B).
      */
     @Override
     public String toString() {
@@ -113,8 +114,8 @@ public class Grammar {
         sb.append("T = {").append(String.join(", ", terminals)).append("}\n");
         sb.append("S = ").append(startSymbol).append("\n\n");
         sb.append("P = {\n");
-        for (Production p : productions) {
-            sb.append("  ").append(p).append("\n");
+        for (String line : GrammarFormatter.formatProductionLines(this)) {
+            sb.append("  ").append(line).append("\n");
         }
         sb.append("}");
         return sb.toString();

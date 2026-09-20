@@ -120,7 +120,8 @@ public class TransformationPanel extends SplitPane {
 
         if (!step.getProductionsAdded().isEmpty()) {
             sb.append("\n\nProducciones agregadas:\n");
-            step.getProductionsAdded().forEach(p -> sb.append("  + ").append(p).append("\n"));
+            GrammarFormatter.groupProductionTexts(step.getProductionsAdded())
+                    .forEach(p -> sb.append("  + ").append(p).append("\n"));
             sb.setLength(sb.length() - 1);
         }
 

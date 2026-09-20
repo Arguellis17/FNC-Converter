@@ -105,9 +105,12 @@ public final class GrammarFormatter {
     }
 
     /**
-     * Bloque Sigma donde las producciones cuyo texto esté en
-     * {@code struckProductionTexts} aparecen tachadas.
-     * El texto de comparación es {@code Production.toString()}.
+     * Bloque Sigma agrupado por variable, donde cada alternativa cuyo texto
+     * ({@code Production.toString()}) esté en {@code struckProductionTexts}
+     * aparece tachada dentro de su grupo. Ej:
+     * <pre>
+     *   S -> A B | B[tachada]
+     * </pre>
      */
     public static String formatWithStruck(Grammar grammar, Set<String> struckProductionTexts) {
         StringBuilder sb = new StringBuilder();
@@ -117,13 +120,49 @@ public final class GrammarFormatter {
             sb.append("  (sin producciones)");
             return sb.toString();
         }
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
         for (Production p : grammar.getProductions()) {
-            String line = "  " + p.getLeftSide() + " -> " + formatRightSide(p.getRightSide());
+            String alt = formatRightSide(p.getRightSide());
             if (struckProductionTexts != null && struckProductionTexts.contains(p.toString())) {
-                line = "  " + strike(line.trim());
+                alt = strike(alt);
             }
-            sb.append(line).append("\n");
+            grouped.computeIfAbsent(p.getLeftSide(), k -> new ArrayList<>()).add(alt);
+        }
+        for (Map.Entry<String, List<String>> entry : grouped.entrySet()) {
+            sb.append("  ").append(entry.getKey()).append(" -> ")
+                    .append(String.join(" | ", entry.getValue())).append("\n");
         }
         return sb.toString().trim();
+    }
+
+    /**
+     * Agrupa textos de producciones individuales ("A -> X") por variable
+     * ("A -> X | Y"). Sirve para mostrar listas de agregadas/eliminadas
+     * en el formato Sigma que usa el curso.
+     */
+    public static List<String> groupProductionTexts(List<String> productionTexts) {
+        List<String> lines = new ArrayList<>();
+        if (productionTexts == null || productionTexts.isEmpty()) {
+            return lines;
+        }
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
+        for (String text : productionTexts) {
+            int arrow = text.indexOf(" -> ");
+            if (arrow < 0) {
+                grouped.computeIfAbsent(text, k -> new ArrayList<>());
+                continue;
+            }
+            String left = text.substring(0, arrow);
+            String right = text.substring(arrow + 4);
+            grouped.computeIfAbsent(left, k -> new ArrayList<>()).add(right);
+        }
+        for (Map.Entry<String, List<String>> entry : grouped.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                lines.add(entry.getKey());
+            } else {
+                lines.add(entry.getKey() + " -> " + String.join(" | ", entry.getValue()));
+            }
+        }
+        return lines;
     }
 }
