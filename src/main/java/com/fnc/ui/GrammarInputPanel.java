@@ -12,7 +12,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -56,7 +55,7 @@ public class GrammarInputPanel extends VBox {
 
         txtProductions = new TextArea();
         txtProductions.setPromptText(
-                "Una producción por línea. Ej:\nS -> A B | a\nA -> a A | ε");
+                "Una producción por línea (cada caracter es un símbolo). Ej:\nS -> AB | a\nA -> aA | ε");
         txtProductions.setPrefRowCount(10);
         txtProductions.getStyleClass().add("mono");
         VBox.setVgrow(txtProductions, Priority.ALWAYS);
@@ -148,19 +147,23 @@ public class GrammarInputPanel extends VBox {
         return new Grammar(variables, terminals, productions, start);
     }
 
+    /**
+     * Parsea un conjunto de símbolos. Cada caracter es un símbolo, por lo que
+     * "S, A, B" y "SAB" son equivalentes. Las comas y espacios son opcionales.
+     */
     private Set<String> parseSymbolSet(String text, String setName) {
-        if (text == null || text.trim().isEmpty()) {
+        if (text == null || text.replaceAll("[,\\s]", "").isEmpty()) {
             throw new IllegalArgumentException(
                     "Debe ingresar el conjunto de " + setName + ".");
         }
-        return Arrays.stream(text.split("[,\\s]+"))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
+        return text.replaceAll("[,\\s]", "").codePoints()
+                .mapToObj(cp -> new String(Character.toChars(cp)))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**
-     * Parsea producciones con formato "A -> X Y | a" (una por línea).
+     * Parsea producciones con formato "A -> XY | a" (una por línea).
+     * Cada caracter es un símbolo, así "B1C" equivale a "B 1 C".
      * Acepta "->" o "→", alternativas con "|" y "ε" como producción vacía.
      */
     private List<Production> parseProductions(String text) {
@@ -186,14 +189,13 @@ public class GrammarInputPanel extends VBox {
             }
             String[] alternatives = sides[1].split("\\|", -1);
             for (String alt : alternatives) {
-                String body = alt.trim();
+                String body = alt.replaceAll("\\s+", "");
                 List<String> rightSide;
                 if (body.isEmpty() || body.equals("ε") || body.equalsIgnoreCase("epsilon")) {
                     rightSide = List.of();
                 } else {
-                    rightSide = Arrays.stream(body.split("\\s+"))
-                            .map(String::trim)
-                            .filter(s -> !s.isEmpty())
+                    rightSide = body.codePoints()
+                            .mapToObj(cp -> new String(Character.toChars(cp)))
                             .collect(Collectors.toList());
                 }
                 result.add(new Production(left, rightSide));

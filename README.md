@@ -72,13 +72,14 @@ con `Main class: com.fnc.Main` (ver `.idea/runConfigurations/`).
 
 ## Formato de entrada
 
-- Variables y terminales: separados por coma o espacios. Ej: `S, A, B`.
+- Cada caracter es un símbolo: los espacios y comas son opcionales.
+- Variables y terminales: Ej: `S, A, B` o `SAB`.
 - Producciones: una por línea, con `->` o `→` y alternativas con `|`. Ej:
 
 ```text
-S -> A B | B
-A -> a A | a | ε
-B -> b B | b
+S -> AB | B
+A -> aA | a | ε
+B -> bB | b
 ```
 
 ## Ramas de trabajo
