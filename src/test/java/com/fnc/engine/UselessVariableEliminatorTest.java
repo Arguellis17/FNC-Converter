@@ -148,6 +148,39 @@ class UselessVariableEliminatorTest {
         assertFalse(hasProduction(result, "S", List.of("B")), "S → B debe eliminarse");
     }
 
+    /**
+     * El ε de una variable generadora NO se elimina aquí.
+     * Solo lo elimina el paso de producciones nulas.
+     * Ej: E con E → a | ε conserva el ε; F (sin producciones) sale.
+     * (Aporte de Juan: fix paso de inútiles ya no elimina producciones vacías.)
+     */
+    @Test
+    void epsilonPreservedForGeneratingVariables() {
+        Grammar grammar = new Grammar(
+            Set.of("S", "E", "F"),
+            Set.of("a"),
+            List.of(
+                new Production("S", List.of("E")),
+                new Production("E", List.of("a")),
+                new Production("E", List.of()) // E → ε
+                // F sin producciones → inútil
+            ),
+            "S"
+        );
+
+        UselessVariableEliminator eliminator = new UselessVariableEliminator();
+        TransformationStep step = eliminator.eliminate(grammar);
+        Grammar result = step.getGrammarAfter();
+
+        assertTrue(eliminator.getGeneratingVariables().contains("E"),
+                "E sigue siendo generadora");
+        assertTrue(hasProduction(result, "E", List.of()),
+                "E → ε se conserva");
+        assertFalse(eliminator.getProductionsRemoved().stream()
+                        .anyMatch(s -> s.equals("E -> ε")),
+                "E → ε no debe aparecer como eliminada");
+    }
+
     private static boolean hasProduction(Grammar grammar, String left, List<String> right) {
         return grammar.getProductions().stream()
                 .anyMatch(p -> p.getLeftSide().equals(left)
