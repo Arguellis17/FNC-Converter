@@ -136,6 +136,54 @@ public final class GrammarFormatter {
     }
 
     /**
+     * Bloque final estilo sección 5 del archivo (paso 6 Organización):
+     * cabecera G = ({...}, {...}, S, P), producciones principales agrupadas
+     * y tabla de Xn en filas de 5.
+     * @param createdXn nombres de Xn en orden de creación.
+     */
+    public static String formatFinalResult(Grammar grammar, List<String> createdXn) {
+        StringBuilder sb = new StringBuilder();
+        if (grammar == null) {
+            return "(sin gramática)";
+        }
+        sb.append("G = ({").append(String.join(",", grammar.getVariables())).append("}, {")
+                .append(String.join(",", grammar.getTerminals())).append("}, ")
+                .append(grammar.getStartSymbol()).append(", P)\n\n");
+        java.util.Set<String> aux = createdXn == null
+                ? java.util.Set.of() : new java.util.LinkedHashSet<>(createdXn);
+        for (String line : formatProductionLines(grammar)) {
+            String left = line.contains(" -> ") ? line.substring(0, line.indexOf(" -> ")) : line;
+            if (!aux.contains(left)) {
+                sb.append(line).append("\n");
+            }
+        }
+        if (!aux.isEmpty()) {
+            sb.append("\n");
+            List<String> cells = new ArrayList<>();
+            Map<String, List<String>> grouped = new LinkedHashMap<>();
+            for (Production p : grammar.getProductions()) {
+                if (aux.contains(p.getLeftSide())) {
+                    grouped.computeIfAbsent(p.getLeftSide(), k -> new ArrayList<>())
+                            .add(formatRightSide(p.getRightSide()));
+                }
+            }
+            for (String name : createdXn) {
+                List<String> alts = grouped.getOrDefault(name, List.of());
+                cells.add(name + "->" + String.join(" | ", alts));
+            }
+            for (int i = 0; i < cells.size(); i += 5) {
+                List<String> row = cells.subList(i, Math.min(i + 5, cells.size()));
+                int width = row.stream().mapToInt(String::length).max().orElse(0) + 4;
+                for (String cell : row) {
+                    sb.append(String.format("%-" + width + "s", cell));
+                }
+                sb.append("\n");
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    /**
      * Agrupa textos de producciones individuales ("A -> X") por variable
      * ("A -> X | Y"). Sirve para mostrar listas de agregadas/eliminadas
      * en el formato Sigma que usa el curso.

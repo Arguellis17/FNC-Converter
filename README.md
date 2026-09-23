@@ -14,14 +14,16 @@ El aplicativo permite:
 3. Ejecutar la depuración y transformación paso a paso o en proceso completo.
 4. Obtener una gramática equivalente en Forma Normal de Chomsky (FNC).
 
-## Proceso de transformación (en orden)
+## Proceso de transformación (orden del archivo Entrenamiento Algoritmo)
 
-1. Eliminación de producciones nulas (ε-producciones).
-2. Eliminación de producciones unitarias (A → B).
-3. Eliminación de variables inútiles (no generadoras).
-4. Eliminación de variables inalcanzables (desde S).
-5. Conversión a FNC: sustitución de terminales en producciones largas
-   y reducción a producciones binarias (A → BC o A → a).
+0. Definición de gramática.
+1. Eliminación de variables inútiles (no generadoras, incluye no definidas).
+2. Eliminación de variables inalcanzables (desde S).
+3. Eliminación de producciones unitarias (A → B).
+4. Eliminación de producciones nulas (ε-producciones, una por una).
+5. Conversión a FNC: partición de producciones de más de 2 símbolos
+   con Xn nuevas sin reutilizar (los terminales no se reemplazan).
+6. Organización gramática (resultado final).
 
 Cada etapa muestra la gramática antes y después, con las producciones
 eliminadas y agregadas (historial completo).

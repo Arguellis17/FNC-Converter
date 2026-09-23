@@ -57,12 +57,17 @@ public class UselessVariableEliminator {
         Set<String> useless = new LinkedHashSet<>(grammar.getVariables());
         useless.removeAll(generatingVariables);
         if (useless.isEmpty()) {
-            description = "No se identificaron variables inútiles. "
-                    + "La gramática no se modifica y se pasa al siguiente paso.";
-            details.add("Sin variables inútiles: todas generan cadenas terminales.");
+            description = "No se han identificado variables inútiles, no hay "
+                    + "cambios en la gramática. Se pasa al siguiente paso.";
+        } else if (useless.size() == 1) {
+            String u = useless.iterator().next();
+            description = "Se identificó la variable inútil: " + u + ". "
+                    + "Se cancelan las producciones que contengan esta variable.";
+            details.add("Se elimina la variable inútil: " + u);
         } else {
-            description = "Variables inútiles identificadas: " + String.join(", ", useless)
-                    + ". Se eliminan la variable y sus producciones.";
+            description = "Se identificaron las variables inútiles: "
+                    + String.join(", ", useless) + ". "
+                    + "Se cancelan las producciones que contengan estas variables.";
             for (String u : useless) {
                 details.add("Se elimina la variable inútil: " + u);
             }
@@ -82,18 +87,16 @@ public class UselessVariableEliminator {
     /**
      * Find all generating variables.
      *
-     * Algorithm:
-     * 1. Mark A as generating if A → w where w ∈ T* (only terminals)
+     * Algorithm (entrenamiento: ε cuenta como cadena generada, pues ε ∈ T*):
+     * 1. Mark A as generating if A → w where w ∈ T* (only terminals, incl ε)
      * 2. Repeat until no more changes:
      *    Mark A as generating if A → X₁X₂...Xₙ and all Xᵢ are generating
      */
     private void findGeneratingVariables(Grammar grammar) {
         Set<String> newGenerating = new LinkedHashSet<>();
 
-        // Step 1: Find variables that directly generate terminals
+        // Step 1: Find variables that directly generate terminals (ε counts)
         for (Production p : grammar.getProductions()) {
-            if (p.getRightSide().isEmpty()) continue; // Skip ε-productions
-
             boolean allTerminals = true;
             for (String symbol : p.getRightSide()) {
                 if (!grammar.getTerminals().contains(symbol)) {
@@ -116,11 +119,8 @@ public class UselessVariableEliminator {
                 // Skip if already generating
                 if (newGenerating.contains(p.getLeftSide())) continue;
 
-                // Skip ε-productions
-                if (p.getRightSide().isEmpty()) continue;
-
                 // Check if all symbols on right side are generating
-                // (either terminal or generating variable)
+                // (either terminal or generating variable; ε counts as generated)
                 boolean allGenerating = true;
                 for (String symbol : p.getRightSide()) {
                     if (!grammar.getTerminals().contains(symbol)

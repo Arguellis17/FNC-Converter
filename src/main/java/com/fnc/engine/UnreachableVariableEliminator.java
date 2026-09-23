@@ -57,13 +57,16 @@ public class UnreachableVariableEliminator {
         Set<String> unreachable = new LinkedHashSet<>(grammar.getVariables());
         unreachable.removeAll(reachableVariables);
         if (unreachable.isEmpty()) {
-            description = "No se identificaron variables inalcanzables. "
-                    + "La gramática no se modifica y se pasa al siguiente paso.";
-            details.add("Sin variables inalcanzables: todas se alcanzan desde "
-                    + grammar.getStartSymbol() + ".");
+            description = "No se han identificado variables inalcanzables, no hay "
+                    + "cambios en la gramática. Se pasa al siguiente paso.";
+        } else if (unreachable.size() == 1) {
+            String u = unreachable.iterator().next();
+            description = "Se identificó como variable inalcanzable: " + u + ". "
+                    + "Se elimina " + u + " con sus producciones.";
+            details.add("Se elimina la variable inalcanzable: " + u);
         } else {
-            description = "Variables inalcanzables identificadas: " + String.join(", ", unreachable)
-                    + ". Se eliminan la variable y sus producciones.";
+            description = "Se identificaron como variables inalcanzables: "
+                    + String.join(", ", unreachable) + ". Se eliminan con sus producciones.";
             for (String u : unreachable) {
                 details.add("Se elimina la variable inalcanzable: " + u);
             }

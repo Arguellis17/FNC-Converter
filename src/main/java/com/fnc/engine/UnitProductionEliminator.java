@@ -51,28 +51,22 @@ public class UnitProductionEliminator {
         List<String> details = new ArrayList<>();
         String description;
         if (productionsRemoved.isEmpty()) {
-            description = "No se identificaron producciones unitarias. "
-                    + "La gramática no se modifica y se pasa al siguiente paso.";
-            details.add("Sin producciones de la forma A -> B.");
+            description = "No se han identificado producciones unitarias, no hay "
+                    + "cambios en la gramática. Se pasa al siguiente paso.";
         } else {
             description = "Se eliminan las producciones unitarias: en cada variable "
                     + "se reemplaza la unitaria por las producciones del símbolo destino.";
             for (String removed : productionsRemoved) {
-                details.add("Se elimina la unitaria: " + removed);
-            }
-            List<String> pairs = new ArrayList<>();
-            for (Map.Entry<String, Set<String>> entry : unitPairs.entrySet()) {
-                for (String b : entry.getValue()) {
-                    pairs.add(entry.getKey() + " -> " + b);
-                }
-            }
-            if (!pairs.isEmpty()) {
-                details.add("Pares unitarios: " + String.join(", ", pairs) + ".");
+                String[] sides = removed.split(" -> ", 2);
+                String left = sides[0];
+                String right = sides.length > 1 ? sides[1] : "";
+                details.add("Eliminando unitaria: " + left + "→" + right + ". "
+                        + "En " + left + " se reemplaza la " + right + " por sus producciones.");
             }
         }
 
         return new TransformationStep(
-            "Eliminación de producciones unitarias",
+            "Eliminación de unitarias",
             description,
             originalGrammar,
             transformedGrammar,
@@ -92,26 +86,27 @@ public class UnitProductionEliminator {
      *    add (A, C) to unit pairs
      */
     private Map<String, Set<String>> findUnitPairs(Grammar grammar) {
-        Map<String, Set<String>> unitPairs = new HashMap<>();
+        // Linked structures: deterministic order (visited set, no cycles loop).
+        Map<String, Set<String>> unitPairs = new LinkedHashMap<>();
 
-        // Initialize with direct unit productions
+        // Initialize with direct unit productions, in production order.
         for (Production p : grammar.getProductions()) {
             if (p.isUnitary()) {
                 String left = p.getLeftSide();
                 String right = p.getRightSide().get(0);
 
-                unitPairs.computeIfAbsent(left, k -> new HashSet<>()).add(right);
+                unitPairs.computeIfAbsent(left, k -> new LinkedHashSet<>()).add(right);
             }
         }
 
-        // Transitive closure
+        // Transitive closure.
         boolean changed = true;
         while (changed) {
             changed = false;
 
             for (Map.Entry<String, Set<String>> entry : unitPairs.entrySet()) {
                 String a = entry.getKey();
-                Set<String> bSet = new HashSet<>(entry.getValue());
+                List<String> bSet = new ArrayList<>(entry.getValue());
 
                 for (String b : bSet) {
                     // If (A, B) exists and B → C is unit, add (A, C)
@@ -130,49 +125,43 @@ public class UnitProductionEliminator {
     }
 
     /**
-     * Create a new grammar without unit productions.
+     * Create a new grammar without unit productions. Each unit production
+     * A→B is replaced in place by B's non-unit productions (in order).
      */
     private Grammar createGrammarWithoutUnitProductions(Grammar grammar,
                                                          Map<String, Set<String>> unitPairs) {
         Grammar newGrammar = grammar.copy();
         List<Production> newProductions = new ArrayList<>();
         Set<String> processedProductions = new HashSet<>();
-
         for (Production p : grammar.getProductions()) {
-            // Skip unit productions
-            if (p.isUnitary()) {
-                productionsRemoved.add(p.toString());
-                continue;
-            }
-
-            // Add non-unit productions as-is
-            String key = p.toString();
-            if (!processedProductions.contains(key)) {
-                newProductions.add(p);
-                processedProductions.add(key);
-            }
+            processedProductions.add(p.toString());
         }
 
-        // For each unit pair (A, B), add B's non-unit productions to A
-        for (Map.Entry<String, Set<String>> entry : unitPairs.entrySet()) {
-            String a = entry.getKey();
-            Set<String> bSet = entry.getValue();
-
-            for (String b : bSet) {
-                // Get all non-unit productions of B
-                for (Production p : grammar.getProductions()) {
-                    if (p.getLeftSide().equals(b) && !p.isUnitary()) {
-                        // Create new production A → (right side of B's production)
-                        Production newProd = new Production(a, p.getRightSide());
-                        String key = newProd.toString();
-
-                        if (!processedProductions.contains(key)) {
-                            newProductions.add(newProd);
-                            processedProductions.add(key);
-                            productionsAdded.add(newProd.toString());
+        for (Production p : grammar.getProductions()) {
+            // Replace unit productions in place.
+            if (p.isUnitary()) {
+                productionsRemoved.add(p.toString());
+                String a = p.getLeftSide();
+                for (String b : unitPairs.getOrDefault(a, Collections.emptySet())) {
+                    for (Production q : grammar.getProductions()) {
+                        if (q.getLeftSide().equals(b) && !q.isUnitary()) {
+                            Production newProd = new Production(a, q.getRightSide());
+                            String key = newProd.toString();
+                            if (!processedProductions.contains(key)) {
+                                newProductions.add(newProd);
+                                processedProductions.add(key);
+                                productionsAdded.add(newProd.toString());
+                            }
                         }
                     }
                 }
+                continue;
+            }
+
+            // Add non-unit productions as-is.
+            String key = p.toString();
+            if (!newProductions.contains(p)) {
+                newProductions.add(p);
             }
         }
 

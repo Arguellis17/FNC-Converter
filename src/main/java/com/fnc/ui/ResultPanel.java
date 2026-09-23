@@ -66,8 +66,9 @@ public class ResultPanel extends VBox {
     }
 
     /**
-     * Verifica que cada producción sea A -> BC (dos variables) o A -> a
-     * (un terminal). Se acepta S -> ε como caso especial.
+     * Verifica la FNC del curso: máximo 2 símbolos por producción
+     * (pueden mezclarse variable + terminal). Solo A -> a (terminal) de
+     * longitud 1. Se acepta S -> ε como caso especial.
      */
     private List<String> findNonCnfProductions(Grammar grammar) {
         List<String> invalid = new ArrayList<>();
@@ -83,9 +84,12 @@ public class ResultPanel extends VBox {
                     invalid.add(p.toString());
                 }
             } else if (right.size() == 2) {
-                if (!grammar.getVariables().contains(right.get(0))
-                        || !grammar.getVariables().contains(right.get(1))) {
-                    invalid.add(p.toString());
+                for (String s : right) {
+                    if (!grammar.getVariables().contains(s)
+                            && !grammar.getTerminals().contains(s)) {
+                        invalid.add(p.toString());
+                        break;
+                    }
                 }
             } else {
                 invalid.add(p.toString());

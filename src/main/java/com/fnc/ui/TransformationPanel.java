@@ -58,6 +58,11 @@ public class TransformationPanel extends SplitPane {
         setDividerPositions(0.3);
     }
 
+    private static String labelFor(TransformationStep step, int position) {
+        int n = step.getMenuNumber() >= 0 ? step.getMenuNumber() : position + 1;
+        return n + ". " + step.getStepName();
+    }
+
     /** Reemplaza el historial completo de pasos. */
     public void setSteps(List<TransformationStep> newSteps) {
         steps.clear();
@@ -65,7 +70,7 @@ public class TransformationPanel extends SplitPane {
         if (newSteps != null) {
             steps.addAll(newSteps);
             for (int i = 0; i < newSteps.size(); i++) {
-                stepNames.add((i + 1) + ". " + newSteps.get(i).getStepName());
+                stepNames.add(labelFor(newSteps.get(i), i));
             }
         }
         lblCount.setText("Pasos: " + steps.size());
@@ -79,7 +84,7 @@ public class TransformationPanel extends SplitPane {
     /** Agrega un paso al final del historial. */
     public void addStep(TransformationStep step) {
         steps.add(step);
-        stepNames.add(steps.size() + ". " + step.getStepName());
+        stepNames.add(labelFor(step, steps.size() - 1));
         lblCount.setText("Pasos: " + steps.size());
         stepList.getSelectionModel().select(steps.size() - 1);
     }
@@ -98,35 +103,48 @@ public class TransformationPanel extends SplitPane {
             return;
         }
         TransformationStep step = steps.get(index);
+        int n = step.getMenuNumber() >= 0 ? step.getMenuNumber() : index + 1;
         StringBuilder sb = new StringBuilder();
-        sb.append(index + 1).append(") ").append(step.getStepName()).append("\n");
+        sb.append(n).append(") ").append(step.getStepName()).append("\n");
         sb.append(step.getDescription()).append("\n");
 
         if (!step.getDetails().isEmpty()) {
             sb.append("\n");
             for (String detail : step.getDetails()) {
-                sb.append("  • ").append(detail).append("\n");
+                if (detail.contains("\n")) {
+                    sb.append(detail).append("\n");
+                } else {
+                    sb.append("  • ").append(detail).append("\n");
+                }
             }
-        }
-
-        sb.append("\n--- Sigma antes ---\n");
-        if (step.hasChanges()) {
-            sb.append(GrammarFormatter.formatWithStruck(
-                    step.getGrammarBefore(),
-                    new java.util.HashSet<>(step.getProductionsRemoved())));
-        } else {
-            sb.append(GrammarFormatter.formatFull(step.getGrammarBefore()));
-        }
-
-        if (!step.getProductionsAdded().isEmpty()) {
-            sb.append("\n\nProducciones agregadas:\n");
-            GrammarFormatter.groupProductionTexts(step.getProductionsAdded())
-                    .forEach(p -> sb.append("  + ").append(p).append("\n"));
             sb.setLength(sb.length() - 1);
         }
 
-        sb.append("\n\n--- Sigma después ---\n");
-        sb.append(GrammarFormatter.formatFull(step.getGrammarAfter()));
+        if (step.getCustomBody() != null) {
+            sb.append("\n\n").append(step.getCustomBody());
+        } else {
+            String before = GrammarFormatter.formatFull(step.getGrammarBefore());
+            String after = GrammarFormatter.formatFull(step.getGrammarAfter());
+            if (before.equals(after) && !step.hasChanges()) {
+                sb.append("\n--- Sigma ---\n");
+                sb.append(before);
+            } else {
+                sb.append("\n--- Sigma antes ---\n");
+                sb.append(GrammarFormatter.formatWithStruck(
+                        step.getGrammarBefore(),
+                        new java.util.HashSet<>(step.getProductionsRemoved())));
+
+                if (!step.getProductionsAdded().isEmpty()) {
+                    sb.append("\n\nProducciones agregadas:\n");
+                    GrammarFormatter.groupProductionTexts(step.getProductionsAdded())
+                            .forEach(p -> sb.append("  + ").append(p).append("\n"));
+                    sb.setLength(sb.length() - 1);
+                }
+
+                sb.append("\n\n--- Sigma después ---\n");
+                sb.append(after);
+            }
+        }
 
         txtDetail.setText(sb.toString());
         txtDetail.setScrollTop(0);

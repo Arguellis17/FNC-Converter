@@ -1,6 +1,7 @@
 package com.fnc.ui;
 
 import com.fnc.engine.ChomskyNormalFormConverter;
+import com.fnc.engine.GrammarService;
 import com.fnc.engine.GrammarValidator;
 import com.fnc.engine.NullProductionEliminator;
 import com.fnc.engine.UnitProductionEliminator;
@@ -20,7 +21,6 @@ import javafx.scene.control.ToolBar;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -139,20 +139,8 @@ public class MainFrame extends BorderPane {
         }
         inputPanel.showValidationResult(true, List.of(), validator.getWarnings());
 
-        List<TransformationStep> steps = new ArrayList<>();
-        Grammar current = grammar;
-        List<Function<Grammar, TransformationStep>> stages = List.of(
-                g -> new UselessVariableEliminator().eliminate(g),
-                g -> new UnreachableVariableEliminator().eliminate(g),
-                g -> new UnitProductionEliminator().eliminate(g),
-                g -> new NullProductionEliminator().eliminate(g),
-                g -> new ChomskyNormalFormConverter().convert(g));
-
-        for (Function<Grammar, TransformationStep> stage : stages) {
-            TransformationStep step = stage.apply(current);
-            steps.add(step);
-            current = step.getGrammarAfter();
-        }
+        List<TransformationStep> steps = new GrammarService().convertFull(grammar);
+        Grammar current = steps.get(steps.size() - 1).getGrammarAfter();
 
         workingGrammar = current;
         transformationPanel.setSteps(steps);
