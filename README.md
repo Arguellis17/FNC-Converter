@@ -120,12 +120,6 @@ revisar/aprobar y mergear. No hacer push directo a `master`.
 ## Entregables del microproyecto
 
 - [x] Código fuente funcional (motor + interfaz).
-- [ ] Documento técnico (portada, planteamiento, objetivos, marco teórico,
-      requerimientos, análisis/diseño, algoritmos, implementación,
-      pruebas, resultados, conclusiones, referencias).
-- [ ] Manual de usuario (instalación, ingreso de gramáticas, ejecución
-      paso a paso y automática, interpretación de resultados, errores,
-      ejemplo completo).
 
 ## Equipo
 
