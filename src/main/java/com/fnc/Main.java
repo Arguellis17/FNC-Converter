@@ -20,6 +20,7 @@ public class Main extends Application {
         Scene scene = new Scene(root, 1100, 700);
         String css = getClass().getResource("/styles.css").toExternalForm();
         scene.getStylesheets().add(css);
+        root.registerAccelerators(scene);
 
         primaryStage.setScene(scene);
         primaryStage.show();

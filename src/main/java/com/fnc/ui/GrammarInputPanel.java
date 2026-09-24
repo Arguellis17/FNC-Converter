@@ -2,6 +2,10 @@ package com.fnc.ui;
 
 import com.fnc.model.Grammar;
 import com.fnc.model.Production;
+import javafx.animation.PauseTransition;
+import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanWrapper;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -10,10 +14,13 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -37,7 +44,13 @@ public class GrammarInputPanel extends VBox {
     private Runnable onValidGrammar;
 
     /** Símbolos auto-detectados del último parseo (símbolo -> variable|terminal). */
-    private java.util.Map<String, String> lastAutoDeclared = new java.util.LinkedHashMap<>();
+    private Map<String, String> lastAutoDeclared = new LinkedHashMap<>();
+
+    /** True cuando la última validación silenciosa/explícita fue exitosa. */
+    private final ReadOnlyBooleanWrapper grammarValid = new ReadOnlyBooleanWrapper(false);
+
+    /** Debounce de 500 ms para la validación silenciosa mientras se escribe. */
+    private final PauseTransition validationDebounce = new PauseTransition(Duration.millis(500));
 
     public GrammarInputPanel() {
         super(8);
@@ -80,6 +93,16 @@ public class GrammarInputPanel extends VBox {
 
         HBox buttons = new HBox(8, btnValidate, btnExample, btnClear);
 
+        // Al escribir producciones: inferir V/T y revalidar con debounce.
+        txtProductions.textProperty().addListener((obs, oldText, newText) -> {
+            inferSymbolsFromProductions();
+            scheduleSilentValidation();
+        });
+        // Los demás campos solo revalidan (ya participan en la inferencia).
+        txtVariables.textProperty().addListener((obs, o, n) -> scheduleSilentValidation());
+        txtTerminals.textProperty().addListener((obs, o, n) -> scheduleSilentValidation());
+        txtStartSymbol.textProperty().addListener((obs, o, n) -> scheduleSilentValidation());
+
         getChildren().addAll(
                 title,
                 new Label("Variables (V):"), txtVariables,
@@ -94,27 +117,137 @@ public class GrammarInputPanel extends VBox {
         this.onValidGrammar = onValidGrammar;
     }
 
+    /** Propiedad observable: true si la gramática actual es válida. */
+    public ReadOnlyBooleanProperty validProperty() {
+        return grammarValid.getReadOnlyProperty();
+    }
+
     /**
      * Valida el contenido del formulario y muestra el resultado.
      * @return true si la gramática es válida.
      */
     public boolean validateInput() {
+        ValidationOutcome outcome = runValidation(
+                txtVariables.getText(), txtTerminals.getText(),
+                txtStartSymbol.getText(), txtProductions.getText());
+        applyOutcome(outcome);
+        if (outcome.valid() && onValidGrammar != null) {
+            onValidGrammar.run();
+        }
+        return outcome.valid();
+    }
+
+    /** Resultado de parsear + validar una foto de los campos del formulario. */
+    private record ValidationOutcome(boolean valid, String syntaxError,
+                                     List<String> errors, List<String> notices) {
+    }
+
+    /** Gramática parseada junto con los símbolos auto-declarados. */
+    private record ParsedGrammar(Grammar grammar, Map<String, String> autoDeclared) {
+    }
+
+    /**
+     * Parsea y valida sin tocar la UI (apto para segundo plano).
+     * Recibe fotos de los textos para no leer controles fuera del hilo FX.
+     */
+    private ValidationOutcome runValidation(String varsText, String termsText,
+                                            String startText, String prodsText) {
+        final ParsedGrammar parsed;
         try {
-            Grammar grammar = parseGrammar();
-            com.fnc.engine.GrammarValidator validator =
-                    new com.fnc.engine.GrammarValidator();
-            boolean valid = validator.validate(grammar);
-            List<String> notices = new ArrayList<>(validator.getWarnings());
-            lastAutoDeclared.forEach((sym, kind) -> notices.add(
-                    "Info: símbolo '" + sym + "' no declarado: se asumió como " + kind + "."));
-            showValidationResult(valid, validator.getErrors(), notices);
-            if (valid && onValidGrammar != null) {
-                onValidGrammar.run();
-            }
-            return valid;
+            parsed = parseFrom(varsText, termsText, startText, prodsText);
         } catch (IllegalArgumentException ex) {
-            showValidationResult(false, List.of("Error: " + ex.getMessage()), List.of());
-            return false;
+            return new ValidationOutcome(false, ex.getMessage(), List.of(), List.of());
+        }
+        com.fnc.engine.GrammarValidator validator = new com.fnc.engine.GrammarValidator();
+        boolean valid = validator.validate(parsed.grammar());
+        List<String> notices = new ArrayList<>(validator.getWarnings());
+        parsed.autoDeclared().forEach((sym, kind) -> notices.add(
+                "Info: símbolo '" + sym + "' no declarado: se asumió como " + kind + "."));
+        return new ValidationOutcome(valid, null, validator.getErrors(), notices);
+    }
+
+    /**
+     * Aplica el resultado de una validación a la UI (debe correr en hilo FX):
+     * mensajes, propiedad observable y borde rojo si hay error de sintaxis.
+     */
+    private void applyOutcome(ValidationOutcome outcome) {
+        if (outcome.syntaxError() != null) {
+            showValidationResult(false,
+                    List.of("Error: " + outcome.syntaxError()), List.of());
+            markSyntaxError(true);
+        } else {
+            showValidationResult(outcome.valid(), outcome.errors(), outcome.notices());
+            markSyntaxError(false);
+        }
+        grammarValid.set(outcome.valid());
+    }
+
+    /** Marca/desmarca el borde rojo del área de producciones. */
+    private void markSyntaxError(boolean error) {
+        if (error) {
+            if (!txtProductions.getStyleClass().contains("syntax-error")) {
+                txtProductions.getStyleClass().add("syntax-error");
+            }
+        } else {
+            txtProductions.getStyleClass().remove("syntax-error");
+        }
+    }
+
+    /** Reprograma la validación silenciosa (debounce de 500 ms). */
+    private void scheduleSilentValidation() {
+        validationDebounce.setOnFinished(e -> {
+            String varsText = txtVariables.getText();
+            String termsText = txtTerminals.getText();
+            String startText = txtStartSymbol.getText();
+            String prodsText = txtProductions.getText();
+            Task<ValidationOutcome> task = new Task<>() {
+                @Override
+                protected ValidationOutcome call() {
+                    return runValidation(varsText, termsText, startText, prodsText);
+                }
+            };
+            // setOnSucceeded corre en el hilo FX: seguro actualizar la UI.
+            task.setOnSucceeded(ev -> applyOutcome(task.getValue()));
+            Thread worker = new Thread(task, "silent-validation");
+            worker.setDaemon(true);
+            worker.start();
+        });
+        validationDebounce.playFromStart();
+    }
+
+    /**
+     * Infiere Variables y Terminales desde las producciones usando la misma
+     * regla de clasificación del motor (mayúscula inicial → variable,
+     * en otro caso → terminal) y puebla los campos V y T.
+     */
+    private void inferSymbolsFromProductions() {
+        final List<Production> productions;
+        try {
+            productions = parseProductions(txtProductions.getText());
+        } catch (IllegalArgumentException ex) {
+            return; // sintaxis incompleta: no tocar V/T hasta que sea parseable
+        }
+        Set<String> variables = new LinkedHashSet<>();
+        Set<String> terminals = new LinkedHashSet<>();
+        for (Production production : productions) {
+            classifySymbol(production.getLeftSide(), variables, terminals);
+            for (String symbol : production.getRightSide()) {
+                classifySymbol(symbol, variables, terminals);
+            }
+        }
+        txtVariables.setText(String.join(", ", variables));
+        txtTerminals.setText(String.join(", ", terminals));
+    }
+
+    /** Clasifica un símbolo con la regla del motor (mayúscula → variable). */
+    private void classifySymbol(String symbol, Set<String> variables, Set<String> terminals) {
+        if (symbol == null || symbol.isEmpty() || symbol.equals("ε")) {
+            return;
+        }
+        if (Character.isUpperCase(symbol.charAt(0))) {
+            variables.add(symbol);
+        } else {
+            terminals.add(symbol);
         }
     }
 
@@ -140,16 +273,29 @@ public class GrammarInputPanel extends VBox {
      * @throws IllegalArgumentException si el formato es incorrecto.
      */
     public Grammar parseGrammar() {
-        Set<String> variables = parseSymbolSet(txtVariables.getText(), "variables");
-        Set<String> terminals = parseSymbolSet(txtTerminals.getText(), "terminales");
+        ParsedGrammar parsed = parseFrom(
+                txtVariables.getText(), txtTerminals.getText(),
+                txtStartSymbol.getText(), txtProductions.getText());
+        lastAutoDeclared = parsed.autoDeclared();
+        return parsed.grammar();
+    }
 
-        String start = txtStartSymbol.getText() == null
-                ? "" : txtStartSymbol.getText().trim();
+    /**
+     * Construye la gramática desde textos dados (sin leer controles:
+     * apto para segundo plano).
+     * @throws IllegalArgumentException si el formato es incorrecto.
+     */
+    private ParsedGrammar parseFrom(String varsText, String termsText,
+                                    String startText, String prodsText) {
+        Set<String> variables = parseSymbolSet(varsText, "variables");
+        Set<String> terminals = parseSymbolSet(termsText, "terminales");
+
+        String start = startText == null ? "" : startText.trim();
         if (start.isEmpty()) {
             throw new IllegalArgumentException("Debe indicar el símbolo inicial.");
         }
 
-        List<Production> productions = parseProductions(txtProductions.getText());
+        List<Production> productions = parseProductions(prodsText);
         if (productions.isEmpty()) {
             throw new IllegalArgumentException("Debe ingresar al menos una producción.");
         }
@@ -157,8 +303,8 @@ public class GrammarInputPanel extends VBox {
         Grammar grammar = new Grammar(variables, terminals, productions, start);
         // No bloquear por símbolos no declarados: se asumen (mayúscula -> variable)
         // y el proceso los clasifica (ej: F sin producciones sale en inútiles).
-        lastAutoDeclared = grammar.autoDeclareMissingSymbols();
-        return grammar;
+        Map<String, String> autoDeclared = grammar.autoDeclareMissingSymbols();
+        return new ParsedGrammar(grammar, autoDeclared);
     }
 
     /**
@@ -229,10 +375,13 @@ public class GrammarInputPanel extends VBox {
 
     /** Limpia todos los campos del formulario (RF20). */
     public void clearAll() {
+        validationDebounce.stop();
         txtVariables.clear();
         txtTerminals.clear();
         txtStartSymbol.clear();
         txtProductions.clear();
         txtValidation.clear();
+        markSyntaxError(false);
+        grammarValid.set(false);
     }
 }

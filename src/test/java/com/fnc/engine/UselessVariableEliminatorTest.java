@@ -17,16 +17,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UselessVariableEliminatorTest {
 
-    /** B solo tiene B → ε, por lo tanto no es generadora. */
+    /**
+     * B solo tiene B → ε. Como ε cuenta como cadena generada (ε ∈ T*),
+     * B es generadora y se conserva (solo la quita el paso de nulas).
+     */
     @Test
-    void simpleNonGenerating() {
+    void epsilonOnlyVariableIsGenerating() {
         Grammar grammar = new Grammar(
             Set.of("S", "A", "B"),
             Set.of("a", "b"),
             List.of(
                 new Production("S", List.of("A")),
                 new Production("A", List.of("a")),
-                new Production("B", List.of()) // B → ε (no generadora)
+                new Production("B", List.of()) // B → ε (generadora vía ε)
             ),
             "S"
         );
@@ -35,11 +38,34 @@ class UselessVariableEliminatorTest {
         TransformationStep step = eliminator.eliminate(grammar);
         Grammar result = step.getGrammarAfter();
 
-        assertFalse(eliminator.getGeneratingVariables().contains("B"),
-                "B no debe ser generadora");
-        assertFalse(result.getProductions().stream()
-                        .anyMatch(p -> p.getLeftSide().equals("B")),
-                "Las producciones de B deben eliminarse");
+        assertTrue(eliminator.getGeneratingVariables().contains("B"),
+                "B debe ser generadora (B → ε)");
+        assertTrue(hasProduction(result, "B", List.of()),
+                "B → ε debe conservarse en este paso");
+    }
+
+    /** F no tiene producciones: es inútil aunque esté declarada. */
+    @Test
+    void simpleNonGenerating() {
+        Grammar grammar = new Grammar(
+            Set.of("S", "A", "F"),
+            Set.of("a", "b"),
+            List.of(
+                new Production("S", List.of("A")),
+                new Production("A", List.of("a"))
+                // F sin producciones → inútil
+            ),
+            "S"
+        );
+
+        UselessVariableEliminator eliminator = new UselessVariableEliminator();
+        TransformationStep step = eliminator.eliminate(grammar);
+        Grammar result = step.getGrammarAfter();
+
+        assertFalse(eliminator.getGeneratingVariables().contains("F"),
+                "F no debe ser generadora");
+        assertFalse(result.getVariables().contains("F"),
+                "F debe salir del conjunto de variables");
     }
 
     /** Cadena S → A → B → C → a: todas son generadoras. */

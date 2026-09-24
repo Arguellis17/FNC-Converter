@@ -7,21 +7,22 @@ import com.fnc.model.TransformationStep;
 import java.util.*;
 
 /**
- * Converts a context-free grammar to Chomsky Normal Form (CNF).
+ * Converts a grammar to the course's Chomsky Normal Form
+ * (Entrenamiento Algoritmo, paso 5):
  *
- * A grammar is in CNF if all productions are of the form:
- * - A → BC (two variables)
- * - A → a (single terminal)
+ * - Terminals are NEVER replaced by new variables.
+ * - Only Xn variables are created, and only when splitting productions
+ *   longer than 2 symbols (which may mix variables and terminals).
+ * - No reuse: every partition creates a NEW Xn, even if another one
+ *   already has the same body.
+ * - Xn are numbered in creation order, traversing variables in the order
+ *   their productions appear (top to bottom) and each production
+ *   left to right. When splitting a production, the new Xn is numbered
+ *   before splitting its own body (depth-first).
+ * - Names already taken are skipped; a bare "X" is never generated.
  *
- * Algorithm:
- * 1. Replace terminals in long productions with new variables
- *    - For terminal 'a' in A → XaY, create X_a → a and replace a with X_a
- * 2. Break long productions into binary productions
- *    - A → X₁X₂...Xₙ becomes:
- *      A → X₁Y₁, Y₁ → X₂Y₂, ..., Yₙ₋₂ → Xₙ₋₁Xₙ
- *
- * Reference: Introduction to Automata Theory, Languages, and Computation
- *            (Hopcroft, Motwani, Ullman) - Chapter 6
+ * Splitting: A → X₁X₂...Xₙ becomes A → X₁Xn, Xn → X₂...Xₙ,
+ * repeating on Xn until everything has at most 2 symbols.
  */
 public class ChomskyNormalFormConverter {
 
@@ -29,50 +30,50 @@ public class ChomskyNormalFormConverter {
     private Grammar transformedGrammar;
     private final List<String> productionsRemoved;
     private final List<String> productionsAdded;
-    private int newVariableCounter;
+    private final List<String> details;
+    private final List<String> createdVariables;
+    private final Set<String> takenNames;
+    private int nextNumber;
 
     public ChomskyNormalFormConverter() {
         this.productionsRemoved = new ArrayList<>();
         this.productionsAdded = new ArrayList<>();
-        this.newVariableCounter = 0;
+        this.details = new ArrayList<>();
+        this.createdVariables = new ArrayList<>();
+        this.takenNames = new HashSet<>();
+        this.nextNumber = 1;
     }
 
     /**
      * Convert the grammar to Chomsky Normal Form.
-     * @param grammar the grammar (should have no ε, unit, or useless variables)
+     * @param grammar the grammar (cleaned by previous steps)
      * @return a TransformationStep with before/after grammars
      */
     public TransformationStep convert(Grammar grammar) {
         this.originalGrammar = grammar.copy();
         this.productionsRemoved.clear();
         this.productionsAdded.clear();
-        this.newVariableCounter = 0;
+        this.details.clear();
+        this.createdVariables.clear();
+        this.takenNames.clear();
+        this.takenNames.addAll(grammar.getVariables());
+        this.takenNames.addAll(grammar.getTerminals());
+        this.nextNumber = 1;
 
-        // Step 1: Replace terminals in long productions
-        Grammar afterTerminalReplacement = replaceTerminalsInLongProductions(grammar);
+        transformedGrammar = splitLongProductions(grammar);
 
-        // Step 2: Break long productions into binary form
-        transformedGrammar = breakLongProductions(afterTerminalReplacement);
-
-        // Step 3: Validate CNF
-        validateCNF(transformedGrammar);
-
-        List<String> details = new ArrayList<>();
         String description;
-        if (productionsRemoved.isEmpty() && productionsAdded.isEmpty()) {
-            description = "La gramática ya está en Forma Normal de Chomsky "
-                    + "(solo A -> BC o A -> a). No se modifica nada.";
-            details.add("Sin cambios: todas las producciones ya cumplen FNC.");
+        if (productionsRemoved.isEmpty()) {
+            description = "No hay producciones de más de 2 símbolos, no hay "
+                    + "cambios en la gramática. Se pasa al siguiente paso.";
         } else {
-            description = "Se sustituyeron los terminales en producciones largas por nuevas "
-                    + "variables y se redujeron todas las producciones a la forma binaria "
-                    + "requerida por la FNC: A -> BC o A -> a.";
-            details.add("Producciones transformadas: " + productionsRemoved.size()
-                    + ". Nuevas variables auxiliares creadas en las agregadas.");
+            description = "Se parten las producciones de más de 2 símbolos: se deja "
+                    + "el primer símbolo y el resto pasa a una Xn nueva, hasta que "
+                    + "todo tenga máximo 2 símbolos.";
         }
 
         return new TransformationStep(
-            "Conversión a Forma Normal de Chomsky",
+            "Aplicando Forma Normal de Chomsky",
             description,
             originalGrammar,
             transformedGrammar,
@@ -83,211 +84,77 @@ public class ChomskyNormalFormConverter {
     }
 
     /**
-     * Replace terminals in productions with length > 1 with new variables.
-     *
-     * Example:
-     * - A → aB becomes A → X_aB where X_a → a
-     * - A → ab becomes A → X_aX_b where X_a → a, X_b → b
+     * Traverse productions in written order (top to bottom); split each
+     * one longer than 2 symbols depth-first.
      */
-    private Grammar replaceTerminalsInLongProductions(Grammar grammar) {
-        Grammar newGrammar = grammar.copy();
-        Map<String, String> terminalToVariable = new HashMap<>();
-        List<Production> newProductions = new ArrayList<>();
+    private Grammar splitLongProductions(Grammar grammar) {
+        Grammar result = grammar.copy();
+        List<Production> output = new ArrayList<>();
 
-        // First, collect all existing productions
+        String currentOwner = null;
         for (Production p : grammar.getProductions()) {
-            // Skip if it's already a valid CNF form (single terminal or two variables)
-            if (p.getRightSide().size() <= 1) {
-                newProductions.add(p);
-                continue;
+            if (!p.getLeftSide().equals(currentOwner)) {
+                currentOwner = p.getLeftSide();
+                details.add("Producciones de " + currentOwner + ":");
             }
-
-            // Check if this production has terminals mixed with variables
-            boolean hasMixedSymbols = false;
-            for (String symbol : p.getRightSide()) {
-                if (grammar.getTerminals().contains(symbol)) {
-                    hasMixedSymbols = true;
-                    break;
-                }
-            }
-
-            if (!hasMixedSymbols) {
-                newProductions.add(p);
-                continue;
-            }
-
-            // Create new right side with variables instead of terminals
-            List<String> newRightSide = new ArrayList<>();
-            for (String symbol : p.getRightSide()) {
-                if (grammar.getTerminals().contains(symbol)) {
-                    // Get or create variable for this terminal
-                    String varName = terminalToVariable.computeIfAbsent(symbol, t -> {
-                        String newVar = generateNewVariable(grammar, newGrammar);
-                        return newVar;
-                    });
-                    newRightSide.add(varName);
-                } else {
-                    newRightSide.add(symbol);
-                }
-            }
-
-            // Add the modified production
-            Production newProd = new Production(p.getLeftSide(), newRightSide);
-            newProductions.add(newProd);
-
-            if (!newProd.equals(p)) {
+            if (p.getRightSide().size() > 2) {
                 productionsRemoved.add(p.toString());
-                productionsAdded.add(newProd.toString());
+                splitDepthFirst(output, p.getLeftSide(), p.getRightSide());
+            } else {
+                output.add(p);
+                if (p.getRightSide().size() == 2) {
+                    details.add(p + " (ya tiene 2 símbolos)");
+                } else {
+                    details.add(p.toString());
+                }
             }
         }
 
-        // Add new productions for terminal variables
-        for (Map.Entry<String, String> entry : terminalToVariable.entrySet()) {
-            String terminal = entry.getKey();
-            String variable = entry.getValue();
-
-            Production termProd = new Production(variable, List.of(terminal));
-            newProductions.add(termProd);
-            productionsAdded.add(termProd.toString());
-        }
-
-        newGrammar.setProductions(newProductions);
-
-        // Add new variables to the grammar
+        result.setProductions(output);
         Set<String> newVariables = new LinkedHashSet<>(grammar.getVariables());
-        newVariables.addAll(terminalToVariable.values());
-        newGrammar.setVariables(newVariables);
-
-        return newGrammar;
-    }
-
-    /**
-     * Break long productions (> 2 symbols) into binary form.
-     *
-     * Example:
-     * - A → BCDE becomes:
-     *   A → BY₁, Y₁ → CY₂, Y₂ → DE
-     */
-    private Grammar breakLongProductions(Grammar grammar) {
-        Grammar newGrammar = grammar.copy();
-        List<Production> newProductions = new ArrayList<>();
-        Set<String> newVariables = new LinkedHashSet<>(grammar.getVariables());
-
-        for (Production p : grammar.getProductions()) {
-            // Already binary or terminal production
-            if (p.getRightSide().size() <= 2) {
-                newProductions.add(p);
-                continue;
-            }
-
-            // Break long production into binary chain
-            List<Production> binaryProductions = decomposeLongProduction(p, newVariables);
-            newProductions.addAll(binaryProductions);
-
-            productionsRemoved.add(p.toString());
-            for (Production bp : binaryProductions) {
-                productionsAdded.add(bp.toString());
-            }
-        }
-
-        newGrammar.setProductions(newProductions);
-        newGrammar.setVariables(newVariables);
-
-        return newGrammar;
-    }
-
-    /**
-     * Decompose a long production into binary productions.
-     *
-     * A → X₁X₂X₃X₄ becomes:
-     * A → X₁Y₁
-     * Y₁ → X₂Y₂
-     * Y₂ → X₃X₄
-     */
-    private List<Production> decomposeLongProduction(Production production, Set<String> variables) {
-        List<Production> result = new ArrayList<>();
-        List<String> rightSide = production.getRightSide();
-
-        if (rightSide.size() <= 2) {
-            result.add(production);
-            return result;
-        }
-
-        String leftSide = production.getLeftSide();
-
-        // First pair: A → X₁Y₁
-        String firstSymbol = rightSide.get(0);
-        String newYVar = generateNewVariableFromString("Y", variables);
-        variables.add(newYVar);
-
-        List<String> firstRight = List.of(firstSymbol, newYVar);
-        result.add(new Production(leftSide, firstRight));
-
-        // Middle pairs: Yᵢ → Xᵢ₊₁Yᵢ₊₁
-        for (int i = 1; i < rightSide.size() - 2; i++) {
-            String currentSymbol = rightSide.get(i);
-            String nextYVar = generateNewVariableFromString("Y", variables);
-            variables.add(nextYVar);
-
-            List<String> middleRight = List.of(currentSymbol, nextYVar);
-            result.add(new Production(newYVar, middleRight));
-
-            newYVar = nextYVar;
-        }
-
-        // Last pair: Yₙ₋₂ → Xₙ₋₁Xₙ
-        String secondToLast = rightSide.get(rightSide.size() - 2);
-        String last = rightSide.get(rightSide.size() - 1);
-
-        List<String> lastRight = List.of(secondToLast, last);
-        result.add(new Production(newYVar, lastRight));
-
+        newVariables.addAll(createdVariables);
+        result.setVariables(newVariables);
         return result;
     }
 
     /**
-     * Generate a new unique variable name.
+     * Split A → X₁X₂...Xₙ (n > 2) into A → X₁Xn and Xn → X₂...Xₙ,
+     * numbering Xn before splitting its own body (depth-first).
      */
-    private String generateNewVariable(Grammar originalGrammar, Grammar currentGrammar) {
-        String name;
-        do {
-            newVariableCounter++;
-            name = "X" + newVariableCounter;
-        } while (originalGrammar.getVariables().contains(name)
-                || currentGrammar.getVariables().contains(name));
+    private void splitDepthFirst(List<Production> output, String left, List<String> right) {
+        String head = right.get(0);
+        List<String> tail = new ArrayList<>(right.subList(1, right.size()));
 
-        return name;
-    }
+        String xn = nextFreeName();
+        details.add(left + "→" + String.join(" ", right)
+                + ": " + xn + "→" + String.join(" ", tail)
+                + ", " + left + "→" + head + " " + xn);
 
-    /**
-     * Generate a new unique variable name with a prefix.
-     */
-    private String generateNewVariableFromString(String prefix, Set<String> existingVariables) {
-        String name;
-        int counter = 1;
-        do {
-            name = prefix + counter;
-            counter++;
-        } while (existingVariables.contains(name));
+        Production headProd = new Production(left, List.of(head, xn));
+        output.add(headProd);
+        productionsAdded.add(headProd.toString());
 
-        return name;
-    }
-
-    /**
-     * Validate that the grammar is in CNF.
-     */
-    private void validateCNF(Grammar grammar) {
-        for (Production p : grammar.getProductions()) {
-            // Valid CNF: A → BC or A → a
-            boolean isBinary = p.getRightSide().size() == 2;
-            boolean isTerminal = p.getRightSide().size() == 1
-                    && grammar.getTerminals().contains(p.getRightSide().get(0));
-            boolean isEpsilon = p.getRightSide().isEmpty();
-
-            if (!isBinary && !isTerminal && !isEpsilon) {
-                System.err.println("WARNING: Production " + p + " is not in CNF form!");
-            }
+        if (tail.size() > 2) {
+            splitDepthFirst(output, xn, tail);
+        } else {
+            Production tailProd = new Production(xn, tail);
+            output.add(tailProd);
+            productionsAdded.add(tailProd.toString());
         }
+    }
+
+    /**
+     * Next free Xn name, skipping taken ones. Never a bare "X".
+     */
+    private String nextFreeName() {
+        String name;
+        do {
+            name = "X" + nextNumber;
+            nextNumber++;
+        } while (takenNames.contains(name));
+        takenNames.add(name);
+        createdVariables.add(name);
+        return name;
     }
 
     // Getters
@@ -297,6 +164,15 @@ public class ChomskyNormalFormConverter {
 
     public List<String> getProductionsAdded() {
         return productionsAdded;
+    }
+
+    public List<String> getDetails() {
+        return details;
+    }
+
+    /** Xn created, in creation order. */
+    public List<String> getCreatedVariables() {
+        return createdVariables;
     }
 
     public Grammar getTransformedGrammar() {

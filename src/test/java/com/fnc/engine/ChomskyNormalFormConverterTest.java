@@ -8,15 +8,17 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pruebas unitarias para {@link ChomskyNormalFormConverter}.
- * Casos basados en Hopcroft, Motwani, Ullman (Introduction to Automata Theory).
+ * Pruebas unitarias para {@link ChomskyNormalFormConverter}
+ * según el archivo (paso 5): sin reemplazo de terminales, Xn globales
+ * sin reutilizar, numeradas en orden de creación.
  */
 class ChomskyNormalFormConverterTest {
 
-    /** Gramática ya en FNC debe quedar intacta. */
+    /** Gramática ya en FNC (incluye variable+terminal) queda intacta. */
     @Test
     void alreadyInCnf() {
         Grammar grammar = new Grammar(
@@ -24,6 +26,7 @@ class ChomskyNormalFormConverterTest {
             Set.of("a", "b"),
             List.of(
                 new Production("S", List.of("A", "B")),
+                new Production("S", List.of("A", "b")),
                 new Production("A", List.of("a")),
                 new Production("B", List.of("b"))
             ),
@@ -32,21 +35,19 @@ class ChomskyNormalFormConverterTest {
 
         ChomskyNormalFormConverter converter = new ChomskyNormalFormConverter();
         TransformationStep step = converter.convert(grammar);
-        Grammar result = step.getGrammarAfter();
 
-        assertTrue(result.getProductions().stream()
-                        .allMatch(p -> p.getRightSide().size() <= 2),
-                "Todas las producciones deben ser binarias o terminales");
         assertTrue(converter.getProductionsRemoved().isEmpty(),
                 "No debe eliminarse ninguna producción");
+        assertTrue(converter.getCreatedVariables().isEmpty(),
+                "No debe crearse ninguna Xn");
     }
 
     /**
-     * S → Aa: el terminal 'a' en producción larga se sustituye
-     * por una variable nueva X → a.
+     * Los terminales NO se reemplazan: S → Aa (binaria con terminal)
+     * se conserva tal cual.
      */
     @Test
-    void terminalReplacement() {
+    void terminalsAreNotReplaced() {
         Grammar grammar = new Grammar(
             Set.of("S", "A"),
             Set.of("a", "b"),
@@ -60,15 +61,14 @@ class ChomskyNormalFormConverterTest {
         ChomskyNormalFormConverter converter = new ChomskyNormalFormConverter();
         Grammar result = converter.convert(grammar).getGrammarAfter();
 
-        assertTrue(result.getProductions().stream()
-                        .anyMatch(p -> p.getRightSide().size() == 1
-                                && p.getRightSide().get(0).equals("a")
-                                && !p.getLeftSide().equals("A")),
-                "Debe crearse una variable nueva para el terminal 'a'");
+        assertTrue(hasProduction(result, "S", List.of("A", "a")),
+                "S → Aa debe conservarse (terminal no se reemplaza)");
+        assertTrue(converter.getCreatedVariables().isEmpty(),
+                "No debe crearse ninguna Xn");
     }
 
     /**
-     * S → ABC se descompone en binarias con variable auxiliar Y.
+     * S → ABC se parte en S → AX1, X1 → BC (se deja el primer símbolo).
      */
     @Test
     void longProductionDecomposition() {
@@ -87,49 +87,26 @@ class ChomskyNormalFormConverterTest {
         ChomskyNormalFormConverter converter = new ChomskyNormalFormConverter();
         Grammar result = converter.convert(grammar).getGrammarAfter();
 
-        assertTrue(result.getProductions().stream()
-                        .anyMatch(p -> p.getLeftSide().equals("S")
-                                && p.getRightSide().size() == 2),
-                "La producción de S debe quedar binaria");
-        assertTrue(result.getProductions().stream()
-                        .anyMatch(p -> p.getLeftSide().startsWith("Y")),
-                "Debe crearse una variable Y auxiliar");
+        assertTrue(hasProduction(result, "S", List.of("A", "X1")),
+                "S → AX1");
+        assertTrue(hasProduction(result, "X1", List.of("B", "C")),
+                "X1 → BC");
+        assertEquals(List.of("X1"), converter.getCreatedVariables(),
+                "Solo debe crearse X1");
     }
 
-    /** Producción mixta S → aAb debe quedar en FNC. */
+    /**
+     * Sin reutilizar: dos colas iguales generan dos Xn distintas.
+     * S → ABC, D → ABC ⇒ X1 → BC y X2 → BC.
+     */
     @Test
-    void mixedProduction() {
+    void noVariableReuse() {
         Grammar grammar = new Grammar(
-            Set.of("S", "A"),
-            Set.of("a", "b"),
-            List.of(
-                new Production("S", List.of("a", "A", "b")),
-                new Production("A", List.of("a", "b"))
-            ),
-            "S"
-        );
-
-        ChomskyNormalFormConverter converter = new ChomskyNormalFormConverter();
-        Grammar result = converter.convert(grammar).getGrammarAfter();
-
-        assertTrue(result.getProductions().stream()
-                        .allMatch(p -> p.getRightSide().size() <= 2),
-                "Todas las producciones deben ser FNC válidas");
-    }
-
-    /** Gramática compleja: S → AB | a, A → a | AC, B → b, C → c. */
-    @Test
-    void complexGrammar() {
-        Grammar grammar = new Grammar(
-            Set.of("S", "A", "B", "C"),
+            Set.of("S", "A", "B", "C", "D"),
             Set.of("a", "b", "c"),
             List.of(
-                new Production("S", List.of("A", "B")),
-                new Production("S", List.of("a")),
-                new Production("A", List.of("a")),
-                new Production("A", List.of("A", "C")),
-                new Production("B", List.of("b")),
-                new Production("C", List.of("c"))
+                new Production("S", List.of("A", "B", "C")),
+                new Production("D", List.of("A", "B", "C"))
             ),
             "S"
         );
@@ -137,14 +114,35 @@ class ChomskyNormalFormConverterTest {
         ChomskyNormalFormConverter converter = new ChomskyNormalFormConverter();
         Grammar result = converter.convert(grammar).getGrammarAfter();
 
-        assertTrue(result.getProductions().stream()
-                        .allMatch(p -> p.getRightSide().size() <= 2
-                                || (p.getRightSide().size() == 1
-                                    && grammar.getTerminals()
-                                            .contains(p.getRightSide().get(0)))),
-                "Todas las producciones deben ser FNC válidas");
-        assertTrue(result.getProductions().stream()
-                        .anyMatch(p -> p.getRightSide().equals(List.of("a"))),
-                "Las producciones terminales deben conservarse");
+        assertEquals(List.of("X1", "X2"), converter.getCreatedVariables(),
+                "Cada partición crea su propia Xn");
+        assertTrue(hasProduction(result, "X1", List.of("B", "C")), "X1 → BC");
+        assertTrue(hasProduction(result, "X2", List.of("B", "C")), "X2 → BC");
+    }
+
+    /** Los nombres ocupados se saltan y nunca se genera "X" sola. */
+    @Test
+    void skipsTakenNames() {
+        Grammar grammar = new Grammar(
+            Set.of("S", "A", "B", "C", "X1"),
+            Set.of("a"),
+            List.of(
+                new Production("S", List.of("A", "B", "C")),
+                new Production("X1", List.of("a"))
+            ),
+            "S"
+        );
+
+        ChomskyNormalFormConverter converter = new ChomskyNormalFormConverter();
+        converter.convert(grammar);
+
+        assertEquals(List.of("X2"), converter.getCreatedVariables(),
+                "X1 está ocupada: la primera libre es X2");
+    }
+
+    private static boolean hasProduction(Grammar grammar, String left, List<String> right) {
+        return grammar.getProductions().stream()
+                .anyMatch(p -> p.getLeftSide().equals(left)
+                        && p.getRightSide().equals(right));
     }
 }
