@@ -4,17 +4,19 @@ import com.fnc.engine.GrammarService;
 import com.fnc.engine.GrammarValidator;
 import com.fnc.model.Grammar;
 import com.fnc.model.TransformationStep;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.geometry.Insets;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.Separator;
-import javafx.scene.control.ToolBar;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
 
 import java.util.List;
 
@@ -28,7 +30,6 @@ public class MainFrame extends BorderPane {
 
     private final GrammarInputPanel inputPanel;
     private final TransformationPanel transformationPanel;
-    private final ResultPanel resultPanel;
     private final Label lblStatus;
 
     /** Gramática sobre la que se aplica la siguiente etapa (modo paso a paso). */
@@ -39,10 +40,14 @@ public class MainFrame extends BorderPane {
     /** Índice del último paso ya mostrado (-1 si no hay sesión activa). */
     private int currentStepIndex = -1;
 
+    /** True cuando la gramática del formulario pasa la validación silenciosa. */
+    private final BooleanProperty grammarValid = new SimpleBooleanProperty(false);
+    /** True cuando la sesión paso a paso aún tiene un siguiente paso. */
+    private final BooleanProperty hasNextStep = new SimpleBooleanProperty(false);
+
     public MainFrame() {
         inputPanel = new GrammarInputPanel();
         transformationPanel = new TransformationPanel();
-        resultPanel = new ResultPanel();
         lblStatus = new Label("Ingrese una gramática para comenzar.");
         lblStatus.getStyleClass().add("status-bar");
 
@@ -55,15 +60,30 @@ public class MainFrame extends BorderPane {
             }
         });
 
-        setTop(new VBox(buildMenuBar(), buildToolBar()));
+        Button btnFull = new Button("▶ Proceso completo");
+        btnFull.getStyleClass().add("primary-button");
+        btnFull.setOnAction(e -> runFullProcess());
+
+        Button btnStepByStep = new Button("Ejecutar el paso a paso");
+        btnStepByStep.setOnAction(e -> startStepByStep());
+        // Solo se habilita cuando la gramática pasa la validación silenciosa.
+        btnStepByStep.disableProperty().bind(grammarValid.not());
+
+        Button btnContinue = new Button("Continuar");
+        btnContinue.setOnAction(e -> continueStepByStep());
+        // Requiere gramática válida y que quede un siguiente paso por mostrar.
+        btnContinue.disableProperty().bind(grammarValid.not().or(hasNextStep.not()));
+
+        // La validez la dicta el panel de entrada (validación silenciosa).
+        grammarValid.bind(inputPanel.validProperty());
+
+        transformationPanel.setActionButtons(btnFull, btnStepByStep, btnContinue);
+
+        setTop(buildMenuBar());
         setLeft(inputPanel);
         inputPanel.setPrefWidth(340);
 
-        VBox center = new VBox();
-        center.getChildren().addAll(transformationPanel, new Separator(), resultPanel);
-        transformationPanel.setPrefHeight(380);
-        resultPanel.setPrefHeight(220);
-        setCenter(center);
+        setCenter(transformationPanel);
 
         setBottom(lblStatus);
         BorderPane.setMargin(lblStatus, new Insets(4, 10, 4, 10));
@@ -88,20 +108,6 @@ public class MainFrame extends BorderPane {
         return new MenuBar(menuArchivo, menuAyuda);
     }
 
-    private ToolBar buildToolBar() {
-        Button btnFull = new Button("▶ Proceso completo");
-        btnFull.getStyleClass().add("primary-button");
-        btnFull.setOnAction(e -> runFullProcess());
-
-        Button btnStepByStep = new Button("Ejecutar el paso a paso");
-        btnStepByStep.setOnAction(e -> startStepByStep());
-
-        Button btnContinue = new Button("Continuar");
-        btnContinue.setOnAction(e -> continueStepByStep());
-
-        return new ToolBar(btnFull, new Separator(), btnStepByStep, btnContinue);
-    }
-
     /** Ejecuta todas las etapas de una vez sobre la gramática del formulario. */
     private void runFullProcess() {
         Grammar grammar = parseAndValidate();
@@ -116,7 +122,6 @@ public class MainFrame extends BorderPane {
 
         workingGrammar = current;
         transformationPanel.setSteps(steps);
-        resultPanel.setGrammar(current);
         setStatus("Proceso completo: " + steps.size()
                 + " pasos. Gramática final lista.");
     }
@@ -135,8 +140,8 @@ public class MainFrame extends BorderPane {
         currentStepIndex = 0;
 
         transformationPanel.clear();
-        resultPanel.clear();
         revealCurrentStep();
+        hasNextStep.set(pendingSteps.size() > 1);
     }
 
     /** Revela el siguiente paso de la sesión paso a paso en curso. */
@@ -158,7 +163,7 @@ public class MainFrame extends BorderPane {
         TransformationStep step = pendingSteps.get(currentStepIndex);
         transformationPanel.addStep(step);
         workingGrammar = step.getGrammarAfter();
-        resultPanel.setGrammar(workingGrammar);
+        hasNextStep.set(currentStepIndex + 1 < pendingSteps.size());
         setStatus("Paso " + (currentStepIndex + 1) + " de " + pendingSteps.size()
                 + ": " + step.getStepName() + ". Pulse \"Continuar\".");
     }
@@ -167,6 +172,18 @@ public class MainFrame extends BorderPane {
     private void resetStepByStep() {
         pendingSteps = null;
         currentStepIndex = -1;
+        hasNextStep.set(false);
+    }
+
+    /**
+     * Registra atajos globales: F5 ejecuta el proceso completo y
+     * F10 inicia el modo paso a paso.
+     */
+    public void registerAccelerators(Scene scene) {
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.F5), this::runFullProcess);
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.F10), this::startStepByStep);
     }
 
     /**
@@ -199,7 +216,6 @@ public class MainFrame extends BorderPane {
     private void newGrammar() {
         inputPanel.clearAll();
         transformationPanel.clear();
-        resultPanel.clear();
         workingGrammar = null;
         resetStepByStep();
         setStatus("Ingrese una gramática para comenzar.");
