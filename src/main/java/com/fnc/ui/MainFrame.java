@@ -1,12 +1,7 @@
 package com.fnc.ui;
 
-import com.fnc.engine.ChomskyNormalFormConverter;
 import com.fnc.engine.GrammarService;
 import com.fnc.engine.GrammarValidator;
-import com.fnc.engine.NullProductionEliminator;
-import com.fnc.engine.UnitProductionEliminator;
-import com.fnc.engine.UnreachableVariableEliminator;
-import com.fnc.engine.UselessVariableEliminator;
 import com.fnc.model.Grammar;
 import com.fnc.model.TransformationStep;
 import javafx.geometry.Insets;
@@ -22,13 +17,12 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * Ventana principal del aplicativo (menú + paneles).
- * Ofrece modo paso a paso (una etapa a la vez) y modo automático
- * (proceso completo), en el orden del microproyecto:
- * inútiles -> inalcanzables -> unitarias -> nulas -> FNC.
+ * Ofrece modo automático (proceso completo) y modo paso a paso
+ * (botón "Ejecutar el paso a paso" + "Continuar"), ambos sobre el
+ * pipeline de {@link GrammarService}.
  */
 public class MainFrame extends BorderPane {
 
@@ -39,6 +33,11 @@ public class MainFrame extends BorderPane {
 
     /** Gramática sobre la que se aplica la siguiente etapa (modo paso a paso). */
     private Grammar workingGrammar;
+
+    /** Pasos calculados de la sesión paso a paso en curso (null si no hay). */
+    private List<TransformationStep> pendingSteps;
+    /** Índice del último paso ya mostrado (-1 si no hay sesión activa). */
+    private int currentStepIndex = -1;
 
     public MainFrame() {
         inputPanel = new GrammarInputPanel();
@@ -94,50 +93,23 @@ public class MainFrame extends BorderPane {
         btnFull.getStyleClass().add("primary-button");
         btnFull.setOnAction(e -> runFullProcess());
 
-        Button btnUseless = new Button("1. Inútiles");
-        btnUseless.setOnAction(e -> runSingleStep("inútiles",
-                g -> new UselessVariableEliminator().eliminate(g)));
+        Button btnStepByStep = new Button("Ejecutar el paso a paso");
+        btnStepByStep.setOnAction(e -> startStepByStep());
 
-        Button btnUnreachable = new Button("2. Inalcanzables");
-        btnUnreachable.setOnAction(e -> runSingleStep("inalcanzables",
-                g -> new UnreachableVariableEliminator().eliminate(g)));
+        Button btnContinue = new Button("Continuar");
+        btnContinue.setOnAction(e -> continueStepByStep());
 
-        Button btnUnit = new Button("3. Unitarias");
-        btnUnit.setOnAction(e -> runSingleStep("unitarias",
-                g -> new UnitProductionEliminator().eliminate(g)));
-
-        Button btnNull = new Button("4. Nulas");
-        btnNull.setOnAction(e -> runSingleStep("nulas",
-                g -> new NullProductionEliminator().eliminate(g)));
-
-        Button btnCnf = new Button("5. FNC");
-        btnCnf.setOnAction(e -> runSingleStep("FNC",
-                g -> new ChomskyNormalFormConverter().convert(g)));
-
-        return new ToolBar(btnFull, new Separator(),
-                btnUseless, btnUnreachable, btnUnit, btnNull, btnCnf);
+        return new ToolBar(btnFull, new Separator(), btnStepByStep, btnContinue);
     }
 
-    /** Ejecuta las 5 etapas en orden sobre la gramática del formulario. */
+    /** Ejecuta todas las etapas de una vez sobre la gramática del formulario. */
     private void runFullProcess() {
-        Grammar grammar;
-        try {
-            grammar = inputPanel.parseGrammar();
-        } catch (IllegalArgumentException ex) {
-            inputPanel.showValidationResult(false,
-                    List.of("Error: " + ex.getMessage()), List.of());
-            setStatus("Corrija la gramática antes de convertir.");
+        Grammar grammar = parseAndValidate();
+        if (grammar == null) {
             return;
         }
 
-        GrammarValidator validator = new GrammarValidator();
-        if (!validator.validate(grammar)) {
-            inputPanel.showValidationResult(false,
-                    validator.getErrors(), validator.getWarnings());
-            setStatus("La gramática tiene errores. El proceso no puede comenzar.");
-            return;
-        }
-        inputPanel.showValidationResult(true, List.of(), validator.getWarnings());
+        resetStepByStep();
 
         List<TransformationStep> steps = new GrammarService().convertFull(grammar);
         Grammar current = steps.get(steps.size() - 1).getGrammarAfter();
@@ -150,29 +122,77 @@ public class MainFrame extends BorderPane {
     }
 
     /**
-     * Ejecuta una sola etapa sobre la gramática de trabajo actual
-     * (modo paso a paso). Si aún no hay gramática de trabajo, parte
-     * de la gramática del formulario previamente validada.
+     * Inicia el modo paso a paso: calcula todos los pasos y muestra
+     * únicamente el primero. Cada click en "Continuar" revela el siguiente.
      */
-    private void runSingleStep(String stageName, Function<Grammar, TransformationStep> stage) {
-        Grammar base = workingGrammar;
-        if (base == null) {
-            if (!inputPanel.validateInput()) {
-                setStatus("Valide primero una gramática correcta.");
-                return;
-            }
-            try {
-                base = inputPanel.parseGrammar();
-            } catch (IllegalArgumentException ex) {
-                setStatus("Error: " + ex.getMessage());
-                return;
-            }
+    private void startStepByStep() {
+        Grammar grammar = parseAndValidate();
+        if (grammar == null) {
+            return;
         }
-        TransformationStep step = stage.apply(base);
-        workingGrammar = step.getGrammarAfter();
+
+        pendingSteps = new GrammarService().convertFull(grammar);
+        currentStepIndex = 0;
+
+        transformationPanel.clear();
+        resultPanel.clear();
+        revealCurrentStep();
+    }
+
+    /** Revela el siguiente paso de la sesión paso a paso en curso. */
+    private void continueStepByStep() {
+        if (pendingSteps == null || currentStepIndex < 0) {
+            setStatus("Pulse primero \"Ejecutar el paso a paso\".");
+            return;
+        }
+        if (currentStepIndex + 1 >= pendingSteps.size()) {
+            setStatus("Ya se mostró el último paso. Gramática final lista.");
+            return;
+        }
+        currentStepIndex++;
+        revealCurrentStep();
+    }
+
+    /** Muestra el paso actual y actualiza la gramática de trabajo y el resultado. */
+    private void revealCurrentStep() {
+        TransformationStep step = pendingSteps.get(currentStepIndex);
         transformationPanel.addStep(step);
+        workingGrammar = step.getGrammarAfter();
         resultPanel.setGrammar(workingGrammar);
-        setStatus("Etapa aplicada: " + step.getStepName() + ".");
+        setStatus("Paso " + (currentStepIndex + 1) + " de " + pendingSteps.size()
+                + ": " + step.getStepName() + ". Pulse \"Continuar\".");
+    }
+
+    /** Reinicia la sesión paso a paso. */
+    private void resetStepByStep() {
+        pendingSteps = null;
+        currentStepIndex = -1;
+    }
+
+    /**
+     * Parsea y valida la gramática del formulario.
+     * @return la gramática válida, o null si hay errores (ya reportados).
+     */
+    private Grammar parseAndValidate() {
+        Grammar grammar;
+        try {
+            grammar = inputPanel.parseGrammar();
+        } catch (IllegalArgumentException ex) {
+            inputPanel.showValidationResult(false,
+                    List.of("Error: " + ex.getMessage()), List.of());
+            setStatus("Corrija la gramática antes de convertir.");
+            return null;
+        }
+
+        GrammarValidator validator = new GrammarValidator();
+        if (!validator.validate(grammar)) {
+            inputPanel.showValidationResult(false,
+                    validator.getErrors(), validator.getWarnings());
+            setStatus("La gramática tiene errores. El proceso no puede comenzar.");
+            return null;
+        }
+        inputPanel.showValidationResult(true, List.of(), validator.getWarnings());
+        return grammar;
     }
 
     /** Limpia todo para ingresar una nueva gramática (RF20). */
@@ -181,6 +201,7 @@ public class MainFrame extends BorderPane {
         transformationPanel.clear();
         resultPanel.clear();
         workingGrammar = null;
+        resetStepByStep();
         setStatus("Ingrese una gramática para comenzar.");
     }
 
