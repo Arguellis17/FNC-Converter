@@ -120,6 +120,7 @@ revisar/aprobar y mergear. No hacer push directo a `master`.
 ## Entregables del microproyecto
 
 - [x] Código fuente funcional (motor + interfaz).
+- [x] Documento tecnico.
 
 ## Equipo
 
