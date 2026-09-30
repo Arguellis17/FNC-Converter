@@ -37,3 +37,6 @@ bin/
 
 # IDE / Tools
 .atl/
+
+# Course reference material (kept locally, not tracked)
+Entrenamiento\ Algoritmo.pdf
